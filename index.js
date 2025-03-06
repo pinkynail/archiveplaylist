@@ -28,42 +28,48 @@ const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 async function getOrCreateFolder(folderName, parentId = null) {
   // Формируем строку поиска для параметра q
-  const query = `"${folderName}" mimeType:application/vnd.google-apps.folder`;
+  const query = `"${folderName}" mimeType:application/vnd.google-apps.folder -in:trash`;
 
   // Параметры запроса
   const params = {
     q: query,
     fields: "files(id)",
-    trashed: false, // Фильтр "не в корзине" выносим сюда
   };
 
-  // Если есть parentId, добавляем фильтр "in parents"
+  // Если есть parentId, добавляем фильтр "in:parents"
   if (parentId) {
     params.q += ` ${parentId} in:parents`;
   }
 
-  const res = await drive.files.list(params);
-  const folders = res.data.files;
+  try {
+    const res = await drive.files.list(params);
+    const folders = res.data.files;
 
-  if (folders && folders.length > 0) {
-    return folders[0].id;
+    if (folders && folders.length > 0) {
+      return folders[0].id;
+    }
+
+    // Если папка не найдена, создаём новую
+    const folderMetadata = {
+      name: folderName,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: parentId ? [parentId] : undefined,
+    };
+    const folder = await drive.files.create({
+      resource: folderMetadata,
+      fields: "id",
+    });
+    return folder.data.id;
+  } catch (error) {
+    console.error("Ошибка в getOrCreateFolder:", error);
+    throw error;
   }
-
-  const folderMetadata = {
-    name: folderName,
-    mimeType: "application/vnd.google-apps.folder",
-    parents: parentId ? [parentId] : undefined,
-  };
-  const folder = await drive.files.create({
-    resource: folderMetadata,
-    fields: "id",
-  });
-  return folder.data.id;
 }
 
 async function getFolders(parentId) {
+  const query = `${parentId} in:parents mimeType:application/vnd.google-apps.folder -in:trash`;
   const res = await drive.files.list({
-    q: `'${parentId}' in parents mimeType='application/vnd.google-apps.folder' trashed=false`,
+    q: query,
     fields: "files(id, name)",
   });
   return res.data.files || [];
