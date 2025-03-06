@@ -1,6 +1,6 @@
 const express = require("express");
 const youtubedl = require("youtube-dl-exec");
-const fs = require("fs").promises; // Используем промисы для асинхронности
+const fs = require("fs").promises; // Используем fs.promises
 const { google } = require("googleapis");
 const app = express();
 
@@ -119,7 +119,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
         songs: [],
       };
       playlists.push(newPlaylist);
-      await savePlaylistsToFile(); // Сохраняем после создания плейлиста
+      await savePlaylistsToFile();
       console.log(`Добавлен плейлист в память:`, newPlaylist);
     }
 
@@ -190,7 +190,10 @@ app.post("/download", async (req, res) => {
     });
     console.log("Скачано:", youtubeUrl);
 
-    if (!fs.existsSync(fileName)) {
+    // Проверяем существование файла асинхронно
+    try {
+      await fs.access(fileName); // Если файла нет, выбросит ошибку
+    } catch (error) {
       throw new Error("Файл не найден после скачивания");
     }
 
@@ -220,11 +223,11 @@ app.post("/download", async (req, res) => {
     const playlist = playlists.find((p) => p.id === folderId);
     if (playlist) {
       playlist.songs.push({ title, driveId: driveResponse.data.id });
-      await savePlaylistsToFile(); // Сохраняем после добавления песни
+      await savePlaylistsToFile();
       console.log(`Добавлена песня "${title}" в плейлист "${playlist.name}"`);
     }
 
-    fs.unlinkSync(fileName);
+    await fs.unlink(fileName); // Асинхронное удаление файла
 
     // Форма и список плейлистов после загрузки
     const folders = await getFolders(archiveFolderId);
