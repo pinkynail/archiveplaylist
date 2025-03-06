@@ -1,5 +1,6 @@
 const express = require('express');
 const youtubedl = require('youtube-dl-exec');
+const fs = require('fs'); // Добавляем модуль для работы с файлами
 const app = express();
 
 app.use(express.urlencoded({ extended: true }));
@@ -21,10 +22,15 @@ app.post('/download', async (req, res) => {
             extractAudio: true,
             audioFormat: 'mp3',
             output: 'song.mp3',
-            cookies: 'cookies.txt' // Указываем файл с cookies
+            cookies: 'cookies.txt'
         });
         console.log('Скачано:', youtubeUrl);
-        res.send(`Аудио скачано из: ${youtubeUrl}`);
+        // Проверяем, существует ли файл
+        if (fs.existsSync('song.mp3')) {
+            res.send(`Аудио скачано из: ${youtubeUrl} и сохранено как song.mp3`);
+        } else {
+            res.send(`Аудио скачано из: ${youtubeUrl}, но файл не найден`);
+        }
     } catch (error) {
         console.error('Ошибка:', error);
         res.send(`Ошибка при скачивании: ${error.message}`);
