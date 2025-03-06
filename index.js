@@ -6,7 +6,6 @@ const app = express();
 
 app.use(express.urlencoded({ extended: true }));
 
-// Настройка Google Drive API через переменные окружения
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const credentials = {
   web: {
