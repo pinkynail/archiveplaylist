@@ -26,29 +26,25 @@ oAuth2Client.setCredentials({
 
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
+// Кэш для ID корневой папки
+let archiveFolderIdCache = null;
+
 async function getOrCreateFolder(folderName, parentId = null) {
-  // Попробуем минимальный запрос для поиска
-  const params = {
-    q: `name:"${folderName}" mimeType:"application/vnd.google-apps.folder"`, // Более строгий синтаксис
-    fields: "files(id)",
-    spaces: "drive",
-  };
-
-  if (parentId) {
-    params.q += ` "${parentId}" in:parents`;
-  }
-
   try {
-    console.log("Поиск папки с параметрами:", params);
-    const res = await drive.files.list(params);
-    console.log("Результат поиска:", res.data);
-    const folders = res.data.files;
-
-    if (folders && folders.length > 0) {
-      return folders[0].id;
+    // Если это корневая папка ArchiveYoutubePlaylist и ID уже есть в кэше
+    if (
+      folderName === "ArchiveYoutubePlaylist" &&
+      archiveFolderIdCache &&
+      !parentId
+    ) {
+      console.log(
+        "Используем кэшированный ID для ArchiveYoutubePlaylist:",
+        archiveFolderIdCache,
+      );
+      return archiveFolderIdCache;
     }
 
-    // Если папка не найдена, создаём её
+    // Создаём папку
     const folderMetadata = {
       name: folderName,
       mimeType: "application/vnd.google-apps.folder",
@@ -58,35 +54,36 @@ async function getOrCreateFolder(folderName, parentId = null) {
       resource: folderMetadata,
       fields: "id",
     });
-    console.log("Создана папка с ID:", folder.data.id);
-    return folder.data.id;
+    const folderId = folder.data.id;
+    console.log(
+      `Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`,
+    );
+
+    // Кэшируем ID только для корневой ArchiveYoutubePlaylist
+    if (folderName === "ArchiveYoutubePlaylist" && !parentId) {
+      archiveFolderIdCache = folderId;
+    }
+
+    return folderId;
   } catch (error) {
-    console.error("Ошибка в getOrCreateFolder:", error);
-    // Обходной путь: если поиск не работает, сразу создаём папку
-    console.log("Пропускаем поиск, создаём папку напрямую...");
-    const folderMetadata = {
-      name: folderName,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: parentId ? [parentId] : undefined,
-    };
-    const folder = await drive.files.create({
-      resource: folderMetadata,
-      fields: "id",
-    });
-    console.log("Создана папка с ID (обходной путь):", folder.data.id);
-    return folder.data.id;
+    console.error(`Ошибка при создании папки "${folderName}":`, error);
+    throw error;
   }
 }
 
 async function getFolders(parentId) {
-  const query = `"${parentId}" in:parents mimeType:"application/vnd.google-apps.folder"`;
-  const res = await drive.files.list({
-    q: query,
-    fields: "files(id, name)",
-    spaces: "drive",
-  });
-  console.log("Найденные папки:", res.data.files);
-  return res.data.files || [];
+  try {
+    const res = await drive.files.list({
+      q: `"${parentId}" in:parents mimeType:"application/vnd.google-apps.folder"`,
+      fields: "files(id, name)",
+      spaces: "drive",
+    });
+    console.log("Найденные папки в", parentId, ":", res.data.files);
+    return res.data.files || [];
+  } catch (error) {
+    console.error("Ошибка в getFolders:", error);
+    return []; // Возвращаем пустой список, если поиск не работает
+  }
 }
 
 app.get("/", async (req, res) => {
