@@ -30,6 +30,7 @@ const drive = google.drive({ version: "v3", auth: oAuth2Client });
 let archiveFolderIdCache = null;
 let playlists = [];
 const PLAYLISTS_FILE = "playlists.json";
+let initializingPromise = null; // Для синхронизации инициализации
 
 async function loadPlaylistsFromFile() {
   try {
@@ -60,51 +61,69 @@ async function savePlaylistsToFile() {
 }
 
 async function initializeArchiveFolder() {
-  try {
-    // Ищем существующую папку ArchiveYoutubePlaylist
-    const response = await drive.files.list({
-      q: "name='ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
-      fields: "files(id)",
-      spaces: "drive",
-    });
-    const folders = response.data.files;
-    if (folders && folders.length > 0) {
-      archiveFolderIdCache = folders[0].id;
-      console.log(
-        "Найдена существующая ArchiveYoutubePlaylist с ID:",
-        archiveFolderIdCache,
-      );
-    } else {
-      const folderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
-      archiveFolderIdCache = folderId; // Устанавливаем кэш сразу
-      console.log(
-        "Создана новая ArchiveYoutubePlaylist с ID:",
-        archiveFolderIdCache,
-      );
-    }
+  if (archiveFolderIdCache) {
+    console.log(
+      "ArchiveYoutubePlaylist уже инициализирована с ID:",
+      archiveFolderIdCache,
+    );
+    return archiveFolderIdCache;
+  }
 
-    // Синхронизация плейлистов
-    if (playlists.length > 0) {
-      const validPlaylists = playlists.filter(
-        (p) => p.parentId === archiveFolderIdCache,
-      );
-      if (validPlaylists.length !== playlists.length) {
-        playlists = validPlaylists;
-        await savePlaylistsToFile();
+  if (initializingPromise) {
+    console.log("Ожидаем завершения существующей инициализации...");
+    return await initializingPromise;
+  }
+
+  initializingPromise = (async () => {
+    try {
+      const response = await drive.files.list({
+        q: "name='ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
+        fields: "files(id)",
+        spaces: "drive",
+      });
+      const folders = response.data.files;
+      if (folders && folders.length > 0) {
+        archiveFolderIdCache = folders[0].id;
         console.log(
-          "Синхронизированы плейлисты с текущим ArchiveYoutubePlaylist",
+          "Найдена существующая ArchiveYoutubePlaylist с ID:",
+          archiveFolderIdCache,
+        );
+      } else {
+        const folderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
+        archiveFolderIdCache = folderId;
+        console.log(
+          "Создана новая ArchiveYoutubePlaylist с ID:",
+          archiveFolderIdCache,
         );
       }
+
+      if (playlists.length > 0) {
+        const validPlaylists = playlists.filter(
+          (p) => p.parentId === archiveFolderIdCache,
+        );
+        if (validPlaylists.length !== playlists.length) {
+          playlists = validPlaylists;
+          await savePlaylistsToFile();
+          console.log(
+            "Синхронизированы плейлисты с текущим ArchiveYoutubePlaylist",
+          );
+        }
+      }
+      return archiveFolderIdCache;
+    } catch (error) {
+      console.error(
+        "Ошибка при инициализации ArchiveYoutubePlaylist:",
+        error.message,
+      );
+      const folderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
+      archiveFolderIdCache = folderId;
+      return archiveFolderIdCache;
+    } finally {
+      initializingPromise = null; // Сбрасываем после завершения
     }
-  } catch (error) {
-    console.error(
-      "Ошибка при инициализации ArchiveYoutubePlaylist:",
-      error.message,
-    );
-    // Если ошибка, создаём папку и кэшируем ID
-    const folderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
-    archiveFolderIdCache = folderId;
-  }
+  })();
+
+  return await initializingPromise;
 }
 
 async function getOrCreateFolder(folderName, parentId = null) {
@@ -174,16 +193,16 @@ async function getFolders(parentId) {
   return folders;
 }
 
-loadPlaylistsFromFile()
-  .then(initializeArchiveFolder)
-  .then(() => console.log("Инициализация завершена"));
+// Инициализация при старте
+(async () => {
+  await loadPlaylistsFromFile();
+  await initializeArchiveFolder();
+  console.log("Инициализация завершена");
+})();
 
 app.get("/", async (req, res) => {
   try {
-    if (!archiveFolderIdCache) {
-      await initializeArchiveFolder(); // Убедимся, что ID есть
-    }
-    const archiveFolderId = archiveFolderIdCache;
+    const archiveFolderId = await initializeArchiveFolder(); // Гарантируем, что ID готов
     const folders = await getFolders(archiveFolderId);
     let folderOptions = folders
       .map((f) => `<option value="${f.id}">${f.name}</option>`)
@@ -236,11 +255,7 @@ app.post("/download", async (req, res) => {
 
     await fsPromises.access(fileName);
 
-    if (!archiveFolderIdCache) {
-      await initializeArchiveFolder(); // Убедимся, что ID есть
-    }
-    const archiveFolderId = archiveFolderIdCache;
-
+    const archiveFolderId = await initializeArchiveFolder(); // Гарантируем, что ID готов
     if (!folderId && newFolderName) {
       folderId = await getOrCreateFolder(newFolderName, archiveFolderId);
     } else if (!folderId) {
