@@ -26,8 +26,8 @@ oAuth2Client.setCredentials({
 
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
-async function getOrCreateFolder(folderName) {
-  const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+async function getOrCreateFolder(folderName, parentId = null) {
+  const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentId ? ` and '${parentId}' in parents` : ""}`;
   const res = await drive.files.list({ q: query, fields: "files(id)" });
   const folders = res.data.files;
 
@@ -38,6 +38,7 @@ async function getOrCreateFolder(folderName) {
   const folderMetadata = {
     name: folderName,
     mimeType: "application/vnd.google-apps.folder",
+    parents: parentId ? [parentId] : undefined,
   };
   const folder = await drive.files.create({
     resource: folderMetadata,
@@ -46,16 +47,17 @@ async function getOrCreateFolder(folderName) {
   return folder.data.id;
 }
 
-async function getFolders() {
+async function getFolders(parentId) {
   const res = await drive.files.list({
-    q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+    q: `'${parentId}' in parents mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: "files(id, name)",
   });
   return res.data.files || [];
 }
 
 app.get("/", async (req, res) => {
-  const folders = await getFolders();
+  const archiveFolderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
+  const folders = await getFolders(archiveFolderId);
   let folderOptions = folders
     .map((f) => `<option value="${f.id}">${f.name}</option>`)
     .join("");
@@ -76,12 +78,19 @@ app.get("/", async (req, res) => {
 
 app.post("/download", async (req, res) => {
   const youtubeUrl = req.body.youtube_url;
-  const videoId = youtubeUrl.split("v=")[1]?.split("&")[0] || "unknown";
-  const fileName = `${videoId}-${Date.now()}.mp3`;
-  let folderId = req.body.folder_id;
   const newFolderName = req.body.new_folder_name;
+  let folderId = req.body.folder_id;
 
   try {
+    // Получаем метаданные видео, включая заголовок
+    const metadata = await youtubedl(youtubeUrl, {
+      dumpSingleJson: true,
+      cookies: "cookies.txt",
+    });
+    const title = metadata.title.replace(/[/\\?%*:|"<>]/g, ""); // Убираем недопустимые символы
+    const fileName = `${title}-${Date.now()}.mp3`; // Заголовок + временная метка
+
+    // Скачиваем аудио
     await youtubedl(youtubeUrl, {
       extractAudio: true,
       audioFormat: "mp3",
@@ -94,11 +103,11 @@ app.post("/download", async (req, res) => {
       throw new Error("Файл не найден после скачивания");
     }
 
-    // Если выбран "Создать новый" и указано имя, создаём папку
+    const archiveFolderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
     if (!folderId && newFolderName) {
-      folderId = await getOrCreateFolder(newFolderName);
+      folderId = await getOrCreateFolder(newFolderName, archiveFolderId);
     } else if (!folderId) {
-      folderId = await getOrCreateFolder("playlist"); // По умолчанию
+      folderId = await getOrCreateFolder("playlist", archiveFolderId);
     }
 
     const fileMetadata = {
