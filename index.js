@@ -28,12 +28,11 @@ const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 // Кэш для ID корневой папки
 let archiveFolderIdCache = null;
-// Массив для хранения созданных плейлистов
+// Массив для хранения плейлистов с песнями
 let playlists = [];
 
 async function getOrCreateFolder(folderName, parentId = null) {
   try {
-    // Если это корневая папка ArchiveYoutubePlaylist и ID уже есть в кэше
     if (
       folderName === "ArchiveYoutubePlaylist" &&
       archiveFolderIdCache &&
@@ -46,7 +45,6 @@ async function getOrCreateFolder(folderName, parentId = null) {
       return archiveFolderIdCache;
     }
 
-    // Проверяем, существует ли папка с таким именем в памяти (только для плейлистов)
     if (parentId) {
       const existingPlaylist = playlists.find(
         (p) => p.name === folderName && p.parentId === parentId,
@@ -60,7 +58,6 @@ async function getOrCreateFolder(folderName, parentId = null) {
       }
     }
 
-    // Создаём папку
     const folderMetadata = {
       name: folderName,
       mimeType: "application/vnd.google-apps.folder",
@@ -75,18 +72,17 @@ async function getOrCreateFolder(folderName, parentId = null) {
       `Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`,
     );
 
-    // Кэшируем ID для ArchiveYoutubePlaylist
     if (folderName === "ArchiveYoutubePlaylist" && !parentId) {
       archiveFolderIdCache = folderId;
     }
 
-    // Добавляем плейлист в массив, если это не корневая папка
     if (parentId) {
-      playlists.push({ id: folderId, name: folderName, parentId });
+      playlists.push({ id: folderId, name: folderName, parentId, songs: [] });
       console.log(`Добавлен плейлист в память:`, {
         id: folderId,
         name: folderName,
         parentId,
+        songs: [],
       });
     }
 
@@ -98,12 +94,12 @@ async function getOrCreateFolder(folderName, parentId = null) {
 }
 
 async function getFolders(parentId) {
-  // Возвращаем плейлисты из памяти, отфильтрованные по parentId
   const folders = playlists.filter((p) => p.parentId === parentId);
   console.log(`Плейлисты из памяти для ${parentId}:`, folders);
   return folders;
 }
 
+// Главная страница
 app.get("/", async (req, res) => {
   try {
     const archiveFolderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
@@ -111,6 +107,10 @@ app.get("/", async (req, res) => {
     let folderOptions = folders
       .map((f) => `<option value="${f.id}">${f.name}</option>`)
       .join("");
+    let playlistList = folders
+      .map((f) => `<li>${f.name} (${f.songs.length} песен)</li>`)
+      .join("");
+
     res.send(`
             <h1>Archive Playlist</h1>
             <form method="POST" action="/download">
@@ -123,12 +123,15 @@ app.get("/", async (req, res) => {
                 <input type="text" name="new_folder_name" placeholder="Имя нового плейлиста (если выбран 'Создать')"><br>
                 <button type="submit">Сохранить</button>
             </form>
+            <h2>Существующие плейлисты:</h2>
+            <ul>${playlistList || "<li>Плейлистов пока нет</li>"}</ul>
         `);
   } catch (error) {
     res.send(`Ошибка при загрузке страницы: ${error.message}`);
   }
 });
 
+// Загрузка аудио
 app.post("/download", async (req, res) => {
   const youtubeUrl = req.body.youtube_url;
   const newFolderName = req.body.new_folder_name;
@@ -139,8 +142,8 @@ app.post("/download", async (req, res) => {
       dumpSingleJson: true,
       cookies: "cookies.txt",
     });
-    const title = metadata.title.replace(/[/\\?%*:|"<>]/g, ""); // Убираем недопустимые символы
-    const fileName = `${title}-${Date.now()}.mp3`; // Заголовок + метка времени
+    const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
+    const fileName = `${title}-${Date.now()}.mp3`;
 
     await youtubedl(youtubeUrl, {
       extractAudio: true,
@@ -176,14 +179,48 @@ app.post("/download", async (req, res) => {
     });
     console.log("Загружено на Drive, ID:", driveResponse.data.id);
 
+    // Добавляем песню в массив плейлиста
+    const playlist = playlists.find((p) => p.id === folderId);
+    if (playlist) {
+      playlist.songs.push({ title, driveId: driveResponse.data.id });
+      console.log(`Добавлена песня "${title}" в плейлист "${playlist.name}"`);
+    }
+
     fs.unlinkSync(fileName);
 
-    res.send(
-      `Аудио "${title}" скачано и загружено на Google Drive (ID: ${driveResponse.data.id})`,
-    );
+    // Форма и список плейлистов после загрузки
+    const folders = await getFolders(archiveFolderId);
+    let folderOptions = folders
+      .map((f) => `<option value="${f.id}">${f.name}</option>`)
+      .join("");
+    let playlistList = folders
+      .map((f) => `<li>${f.name} (${f.songs.length} песен)</li>`)
+      .join("");
+
+    res.send(`
+            <h1>Archive Playlist</h1>
+            <p>Аудио "${title}" скачано и загружено на Google Drive (ID: ${driveResponse.data.id})</p>
+            <form method="POST" action="/download">
+                <input type="text" name="youtube_url" placeholder="Вставь ссылку на YouTube" required><br>
+                <label>Выбери плейлист:</label><br>
+                <select name="folder_id">
+                    <option value="">Создать новый плейлист</option>
+                    ${folderOptions}
+                </select><br>
+                <input type="text" name="new_folder_name" placeholder="Имя нового плейлиста (если выбран 'Создать')"><br>
+                <button type="submit">Сохранить ещё</button>
+            </form>
+            <h2>Существующие плейлисты:</h2>
+            <ul>${playlistList || "<li>Плейлистов пока нет</li>"}</ul>
+            <p><a href="/">Вернуться на главную</a></p>
+        `);
   } catch (error) {
     console.error("Ошибка:", error);
-    res.send(`Ошибка: ${error.message}`);
+    res.send(`
+            <h1>Archive Playlist</h1>
+            <p>Ошибка: ${error.message}</p>
+            <p><a href="/">Вернуться на главную</a></p>
+        `);
   }
 });
 
