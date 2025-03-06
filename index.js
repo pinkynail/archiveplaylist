@@ -26,11 +26,49 @@ oAuth2Client.setCredentials({
 
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
-app.get("/", (req, res) => {
+async function getOrCreateFolder(folderName) {
+  const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await drive.files.list({ q: query, fields: "files(id)" });
+  const folders = res.data.files;
+
+  if (folders && folders.length > 0) {
+    return folders[0].id;
+  }
+
+  const folderMetadata = {
+    name: folderName,
+    mimeType: "application/vnd.google-apps.folder",
+  };
+  const folder = await drive.files.create({
+    resource: folderMetadata,
+    fields: "id",
+  });
+  return folder.data.id;
+}
+
+async function getFolders() {
+  const res = await drive.files.list({
+    q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+    fields: "files(id, name)",
+  });
+  return res.data.files || [];
+}
+
+app.get("/", async (req, res) => {
+  const folders = await getFolders();
+  let folderOptions = folders
+    .map((f) => `<option value="${f.id}">${f.name}</option>`)
+    .join("");
   res.send(`
         <h1>Archive Playlist</h1>
         <form method="POST" action="/download">
-            <input type="text" name="youtube_url" placeholder="Вставь ссылку на YouTube" required>
+            <input type="text" name="youtube_url" placeholder="Вставь ссылку на YouTube" required><br>
+            <label>Выбери плейлист:</label><br>
+            <select name="folder_id">
+                <option value="">Создать новый плейлист</option>
+                ${folderOptions}
+            </select><br>
+            <input type="text" name="new_folder_name" placeholder="Имя нового плейлиста (если выбран 'Создать')"><br>
             <button type="submit">Сохранить</button>
         </form>
     `);
@@ -38,8 +76,10 @@ app.get("/", (req, res) => {
 
 app.post("/download", async (req, res) => {
   const youtubeUrl = req.body.youtube_url;
-  const videoId = youtubeUrl.split("v=")[1]?.split("&")[0] || "unknown"; // Извлекаем ID видео
-  const fileName = `${videoId}-${Date.now()}.mp3`; // Уникальное имя с ID и датой
+  const videoId = youtubeUrl.split("v=")[1]?.split("&")[0] || "unknown";
+  const fileName = `${videoId}-${Date.now()}.mp3`;
+  let folderId = req.body.folder_id;
+  const newFolderName = req.body.new_folder_name;
 
   try {
     await youtubedl(youtubeUrl, {
@@ -54,7 +94,17 @@ app.post("/download", async (req, res) => {
       throw new Error("Файл не найден после скачивания");
     }
 
-    const fileMetadata = { name: fileName };
+    // Если выбран "Создать новый" и указано имя, создаём папку
+    if (!folderId && newFolderName) {
+      folderId = await getOrCreateFolder(newFolderName);
+    } else if (!folderId) {
+      folderId = await getOrCreateFolder("playlist"); // По умолчанию
+    }
+
+    const fileMetadata = {
+      name: fileName,
+      parents: [folderId],
+    };
     const media = {
       mimeType: "audio/mp3",
       body: fs.createReadStream(fileName),
@@ -66,7 +116,6 @@ app.post("/download", async (req, res) => {
     });
     console.log("Загружено на Drive, ID:", driveResponse.data.id);
 
-    // Удаляем временный файл
     fs.unlinkSync(fileName);
 
     res.send(
