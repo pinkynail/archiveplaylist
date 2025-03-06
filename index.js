@@ -38,23 +38,26 @@ app.get("/", (req, res) => {
 
 app.post("/download", async (req, res) => {
   const youtubeUrl = req.body.youtube_url;
+  const videoId = youtubeUrl.split("v=")[1]?.split("&")[0] || "unknown"; // Извлекаем ID видео
+  const fileName = `${videoId}-${Date.now()}.mp3`; // Уникальное имя с ID и датой
+
   try {
     await youtubedl(youtubeUrl, {
       extractAudio: true,
       audioFormat: "mp3",
-      output: "song.mp3",
+      output: fileName,
       cookies: "cookies.txt",
     });
     console.log("Скачано:", youtubeUrl);
 
-    if (!fs.existsSync("song.mp3")) {
+    if (!fs.existsSync(fileName)) {
       throw new Error("Файл не найден после скачивания");
     }
 
-    const fileMetadata = { name: "song.mp3" };
+    const fileMetadata = { name: fileName };
     const media = {
       mimeType: "audio/mp3",
-      body: fs.createReadStream("song.mp3"),
+      body: fs.createReadStream(fileName),
     };
     const driveResponse = await drive.files.create({
       resource: fileMetadata,
@@ -62,6 +65,9 @@ app.post("/download", async (req, res) => {
       fields: "id",
     });
     console.log("Загружено на Drive, ID:", driveResponse.data.id);
+
+    // Удаляем временный файл
+    fs.unlinkSync(fileName);
 
     res.send(
       `Аудио скачано из: ${youtubeUrl} и загружено на Google Drive (ID: ${driveResponse.data.id})`,
