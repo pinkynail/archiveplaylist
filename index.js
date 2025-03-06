@@ -27,7 +27,7 @@ oAuth2Client.setCredentials({
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 async function getOrCreateFolder(folderName, parentId = null) {
-  const query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentId ? ` and '${parentId}' in parents` : ""}`;
+  const query = `name='${folderName}' mimeType='application/vnd.google-apps.folder' trashed=false${parentId ? ` '${parentId}' in parents` : ""}`;
   const res = await drive.files.list({ q: query, fields: "files(id)" });
   const folders = res.data.files;
 
@@ -49,7 +49,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
 
 async function getFolders(parentId) {
   const res = await drive.files.list({
-    q: `'${parentId}' in parents mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    q: `'${parentId}' in parents mimeType='application/vnd.google-apps.folder' trashed=false`,
     fields: "files(id, name)",
   });
   return res.data.files || [];
@@ -82,15 +82,13 @@ app.post("/download", async (req, res) => {
   let folderId = req.body.folder_id;
 
   try {
-    // Получаем метаданные видео, включая заголовок
     const metadata = await youtubedl(youtubeUrl, {
       dumpSingleJson: true,
       cookies: "cookies.txt",
     });
-    const title = metadata.title.replace(/[/\\?%*:|"<>]/g, ""); // Убираем недопустимые символы
-    const fileName = `${title}-${Date.now()}.mp3`; // Заголовок + временная метка
+    const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
+    const fileName = `${title}-${Date.now()}.mp3`;
 
-    // Скачиваем аудио
     await youtubedl(youtubeUrl, {
       extractAudio: true,
       audioFormat: "mp3",
