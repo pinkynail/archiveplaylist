@@ -1,11 +1,10 @@
-const express = require('express');
+const express = require(express);
+const youtubedl = require(youtube-dl-exec);
 const app = express();
 
-// Настраиваем парсинг данных из формы
 app.use(express.urlencoded({ extended: true }));
 
-// Главная страница с формой
-app.get('/', (req, res) => {
+app.get(/, (req, res) => {
     res.send(`
         <h1>Archive Playlist</h1>
         <form method="POST" action="/download">
@@ -15,13 +14,22 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Обработка POST-запроса
-app.post('/download', (req, res) => {
+app.post(/download, async (req, res) => {
     const youtubeUrl = req.body.youtube_url;
-    console.log('Получена ссылка:', youtubeUrl);
-    res.send(`Ссылка принята: ${youtubeUrl}`);
+    try {
+        await youtubedl(youtubeUrl, {
+            extractAudio: true,
+            audioFormat: mp3,
+            output: song.mp3
+        });
+        console.log(Скачано:, youtubeUrl);
+        res.send(`Аудио скачано из: ${youtubeUrl}`);
+    } catch (error) {
+        console.error(Ошибка:, error);
+        res.send(`Ошибка при скачивании: ${error.message}`);
+    }
 });
 
 app.listen(3000, () => {
-    console.log('Server running on port 3000');
+    console.log(Server running on port 3000);
 });
