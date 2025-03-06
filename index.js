@@ -27,24 +27,21 @@ oAuth2Client.setCredentials({
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 async function getOrCreateFolder(folderName, parentId = null) {
-  // Формируем строку поиска: точное имя и тип папки
-  const query = `"${folderName}" mimeType:application/vnd.google-apps.folder`;
-
-  // Параметры запроса
+  // Попробуем минимальный запрос для поиска
   const params = {
-    q: query,
+    q: `name:"${folderName}" mimeType:"application/vnd.google-apps.folder"`, // Более строгий синтаксис
     fields: "files(id)",
-    spaces: "drive", // Ограничиваем поиск только Google Drive (не корзина)
+    spaces: "drive",
   };
 
   if (parentId) {
-    params.q += ` ${parentId} in:parents`;
+    params.q += ` "${parentId}" in:parents`;
   }
 
   try {
-    console.log("Поиск папки с параметрами:", params); // Отладка
+    console.log("Поиск папки с параметрами:", params);
     const res = await drive.files.list(params);
-    console.log("Результат поиска:", res.data); // Отладка
+    console.log("Результат поиска:", res.data);
     const folders = res.data.files;
 
     if (folders && folders.length > 0) {
@@ -61,22 +58,34 @@ async function getOrCreateFolder(folderName, parentId = null) {
       resource: folderMetadata,
       fields: "id",
     });
-    console.log("Создана папка с ID:", folder.data.id); // Отладка
+    console.log("Создана папка с ID:", folder.data.id);
     return folder.data.id;
   } catch (error) {
     console.error("Ошибка в getOrCreateFolder:", error);
-    throw error;
+    // Обходной путь: если поиск не работает, сразу создаём папку
+    console.log("Пропускаем поиск, создаём папку напрямую...");
+    const folderMetadata = {
+      name: folderName,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: parentId ? [parentId] : undefined,
+    };
+    const folder = await drive.files.create({
+      resource: folderMetadata,
+      fields: "id",
+    });
+    console.log("Создана папка с ID (обходной путь):", folder.data.id);
+    return folder.data.id;
   }
 }
 
 async function getFolders(parentId) {
-  const query = `${parentId} in:parents mimeType:application/vnd.google-apps.folder`;
+  const query = `"${parentId}" in:parents mimeType:"application/vnd.google-apps.folder"`;
   const res = await drive.files.list({
     q: query,
     fields: "files(id, name)",
-    spaces: "drive", // Ограничиваем поиск только Google Drive
+    spaces: "drive",
   });
-  console.log("Найденные папки:", res.data.files); // Отладка
+  console.log("Найденные папки:", res.data.files);
   return res.data.files || [];
 }
 
