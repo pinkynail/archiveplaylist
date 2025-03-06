@@ -26,10 +26,14 @@ oAuth2Client.setCredentials({
 
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
+// Кэш для ID корневой папки
 let archiveFolderIdCache = null;
+// Массив для хранения созданных плейлистов
+let playlists = [];
 
 async function getOrCreateFolder(folderName, parentId = null) {
   try {
+    // Если это корневая папка ArchiveYoutubePlaylist и ID уже есть в кэше
     if (
       folderName === "ArchiveYoutubePlaylist" &&
       archiveFolderIdCache &&
@@ -42,6 +46,21 @@ async function getOrCreateFolder(folderName, parentId = null) {
       return archiveFolderIdCache;
     }
 
+    // Проверяем, существует ли папка с таким именем в памяти (только для плейлистов)
+    if (parentId) {
+      const existingPlaylist = playlists.find(
+        (p) => p.name === folderName && p.parentId === parentId,
+      );
+      if (existingPlaylist) {
+        console.log(
+          `Используем существующий плейлист "${folderName}" с ID:`,
+          existingPlaylist.id,
+        );
+        return existingPlaylist.id;
+      }
+    }
+
+    // Создаём папку
     const folderMetadata = {
       name: folderName,
       mimeType: "application/vnd.google-apps.folder",
@@ -56,8 +75,19 @@ async function getOrCreateFolder(folderName, parentId = null) {
       `Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`,
     );
 
+    // Кэшируем ID для ArchiveYoutubePlaylist
     if (folderName === "ArchiveYoutubePlaylist" && !parentId) {
       archiveFolderIdCache = folderId;
+    }
+
+    // Добавляем плейлист в массив, если это не корневая папка
+    if (parentId) {
+      playlists.push({ id: folderId, name: folderName, parentId });
+      console.log(`Добавлен плейлист в память:`, {
+        id: folderId,
+        name: folderName,
+        parentId,
+      });
     }
 
     return folderId;
@@ -68,8 +98,10 @@ async function getOrCreateFolder(folderName, parentId = null) {
 }
 
 async function getFolders(parentId) {
-  console.log(`Пропускаем поиск папок в ${parentId} из-за проблем с API`);
-  return [];
+  // Возвращаем плейлисты из памяти, отфильтрованные по parentId
+  const folders = playlists.filter((p) => p.parentId === parentId);
+  console.log(`Плейлисты из памяти для ${parentId}:`, folders);
+  return folders;
 }
 
 app.get("/", async (req, res) => {
