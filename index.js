@@ -63,7 +63,7 @@ async function initializeArchiveFolder() {
   try {
     // Ищем существующую папку ArchiveYoutubePlaylist
     const response = await drive.files.list({
-      q: "'ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
+      q: "name='ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
       fields: "files(id)",
       spaces: "drive",
     });
