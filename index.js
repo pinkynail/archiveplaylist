@@ -61,31 +61,7 @@ async function savePlaylistsToFile() {
 
 async function initializeArchiveFolder() {
   try {
-    // Проверяем, есть ли parentId в playlists.json
-    if (playlists.length > 0) {
-      const parentIds = [...new Set(playlists.map((p) => p.parentId))];
-      if (parentIds.length === 1) {
-        archiveFolderIdCache = parentIds[0];
-        console.log(
-          "Используем parentId из playlists.json:",
-          archiveFolderIdCache,
-        );
-        // Проверяем, существует ли папка
-        const response = await drive.files.get({
-          fileId: archiveFolderIdCache,
-          fields: "id, name",
-        });
-        if (response.data.name === "ArchiveYoutubePlaylist") {
-          console.log(
-            "Подтверждена существующая ArchiveYoutubePlaylist с ID:",
-            archiveFolderIdCache,
-          );
-          return;
-        }
-      }
-    }
-
-    // Если parentId нет или он неверный, ищем или создаем
+    // Ищем существующую папку ArchiveYoutubePlaylist
     const response = await drive.files.list({
       q: "'ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
       fields: "files(id)",
@@ -103,15 +79,17 @@ async function initializeArchiveFolder() {
     }
 
     // Синхронизация плейлистов
-    const validPlaylists = playlists.filter(
-      (p) => p.parentId === archiveFolderIdCache,
-    );
-    if (validPlaylists.length !== playlists.length) {
-      playlists = validPlaylists;
-      await savePlaylistsToFile();
-      console.log(
-        "Синхронизированы плейлисты с текущим ArchiveYoutubePlaylist",
+    if (playlists.length > 0) {
+      const validPlaylists = playlists.filter(
+        (p) => p.parentId === archiveFolderIdCache,
       );
+      if (validPlaylists.length !== playlists.length) {
+        playlists = validPlaylists;
+        await savePlaylistsToFile();
+        console.log(
+          "Синхронизированы плейлисты с текущим ArchiveYoutubePlaylist",
+        );
+      }
     }
   } catch (error) {
     console.error(
