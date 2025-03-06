@@ -27,29 +27,31 @@ oAuth2Client.setCredentials({
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 async function getOrCreateFolder(folderName, parentId = null) {
-  // Формируем строку поиска для параметра q
-  const query = `"${folderName}" mimeType:application/vnd.google-apps.folder -in:trash`;
+  // Формируем строку поиска: точное имя и тип папки
+  const query = `"${folderName}" mimeType:application/vnd.google-apps.folder`;
 
   // Параметры запроса
   const params = {
     q: query,
     fields: "files(id)",
+    spaces: "drive", // Ограничиваем поиск только Google Drive (не корзина)
   };
 
-  // Если есть parentId, добавляем фильтр "in:parents"
   if (parentId) {
     params.q += ` ${parentId} in:parents`;
   }
 
   try {
+    console.log("Поиск папки с параметрами:", params); // Отладка
     const res = await drive.files.list(params);
+    console.log("Результат поиска:", res.data); // Отладка
     const folders = res.data.files;
 
     if (folders && folders.length > 0) {
       return folders[0].id;
     }
 
-    // Если папка не найдена, создаём новую
+    // Если папка не найдена, создаём её
     const folderMetadata = {
       name: folderName,
       mimeType: "application/vnd.google-apps.folder",
@@ -59,6 +61,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
       resource: folderMetadata,
       fields: "id",
     });
+    console.log("Создана папка с ID:", folder.data.id); // Отладка
     return folder.data.id;
   } catch (error) {
     console.error("Ошибка в getOrCreateFolder:", error);
@@ -67,21 +70,24 @@ async function getOrCreateFolder(folderName, parentId = null) {
 }
 
 async function getFolders(parentId) {
-  const query = `${parentId} in:parents mimeType:application/vnd.google-apps.folder -in:trash`;
+  const query = `${parentId} in:parents mimeType:application/vnd.google-apps.folder`;
   const res = await drive.files.list({
     q: query,
     fields: "files(id, name)",
+    spaces: "drive", // Ограничиваем поиск только Google Drive
   });
+  console.log("Найденные папки:", res.data.files); // Отладка
   return res.data.files || [];
 }
 
 app.get("/", async (req, res) => {
-  const archiveFolderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
-  const folders = await getFolders(archiveFolderId);
-  let folderOptions = folders
-    .map((f) => `<option value="${f.id}">${f.name}</option>`)
-    .join("");
-  res.send(`
+  try {
+    const archiveFolderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
+    const folders = await getFolders(archiveFolderId);
+    let folderOptions = folders
+      .map((f) => `<option value="${f.id}">${f.name}</option>`)
+      .join("");
+    res.send(`
         <h1>Archive Playlist</h1>
         <form method="POST" action="/download">
             <input type="text" name="youtube_url" placeholder="Вставь ссылку на YouTube" required><br>
@@ -94,6 +100,9 @@ app.get("/", async (req, res) => {
             <button type="submit">Сохранить</button>
         </form>
     `);
+  } catch (error) {
+    res.send(`Ошибка при загрузке страницы: ${error.message}`);
+  }
 });
 
 app.post("/download", async (req, res) => {
