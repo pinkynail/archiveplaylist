@@ -20,7 +20,8 @@ app.post('/download', async (req, res) => {
         await youtubedl(youtubeUrl, {
             extractAudio: true,
             audioFormat: 'mp3',
-            output: 'song.mp3'
+            output: 'song.mp3',
+            cookies: 'cookies.txt' // Указываем файл с cookies
         });
         console.log('Скачано:', youtubeUrl);
         res.send(`Аудио скачано из: ${youtubeUrl}`);
