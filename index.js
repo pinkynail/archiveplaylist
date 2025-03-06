@@ -75,7 +75,12 @@ async function initializeArchiveFolder() {
         archiveFolderIdCache,
       );
     } else {
-      archiveFolderIdCache = await getOrCreateFolder("ArchiveYoutubePlaylist");
+      const folderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
+      archiveFolderIdCache = folderId; // Устанавливаем кэш сразу
+      console.log(
+        "Создана новая ArchiveYoutubePlaylist с ID:",
+        archiveFolderIdCache,
+      );
     }
 
     // Синхронизация плейлистов
@@ -96,7 +101,9 @@ async function initializeArchiveFolder() {
       "Ошибка при инициализации ArchiveYoutubePlaylist:",
       error.message,
     );
-    archiveFolderIdCache = await getOrCreateFolder("ArchiveYoutubePlaylist");
+    // Если ошибка, создаём папку и кэшируем ID
+    const folderId = await getOrCreateFolder("ArchiveYoutubePlaylist");
+    archiveFolderIdCache = folderId;
   }
 }
 
@@ -107,6 +114,10 @@ async function getOrCreateFolder(folderName, parentId = null) {
       archiveFolderIdCache &&
       !parentId
     ) {
+      console.log(
+        "Используем кэшированный ID для ArchiveYoutubePlaylist:",
+        archiveFolderIdCache,
+      );
       return archiveFolderIdCache;
     }
 
@@ -169,9 +180,10 @@ loadPlaylistsFromFile()
 
 app.get("/", async (req, res) => {
   try {
-    const archiveFolderId =
-      archiveFolderIdCache ||
-      (await getOrCreateFolder("ArchiveYoutubePlaylist"));
+    if (!archiveFolderIdCache) {
+      await initializeArchiveFolder(); // Убедимся, что ID есть
+    }
+    const archiveFolderId = archiveFolderIdCache;
     const folders = await getFolders(archiveFolderId);
     let folderOptions = folders
       .map((f) => `<option value="${f.id}">${f.name}</option>`)
@@ -196,6 +208,7 @@ app.get("/", async (req, res) => {
       <ul>${playlistList || "<li>Плейлистов пока нет</li>"}</ul>
     `);
   } catch (error) {
+    console.error("Ошибка в GET /:", error);
     res.send(`Ошибка при загрузке страницы: ${error.message}`);
   }
 });
@@ -223,9 +236,11 @@ app.post("/download", async (req, res) => {
 
     await fsPromises.access(fileName);
 
-    const archiveFolderId =
-      archiveFolderIdCache ||
-      (await getOrCreateFolder("ArchiveYoutubePlaylist"));
+    if (!archiveFolderIdCache) {
+      await initializeArchiveFolder(); // Убедимся, что ID есть
+    }
+    const archiveFolderId = archiveFolderIdCache;
+
     if (!folderId && newFolderName) {
       folderId = await getOrCreateFolder(newFolderName, archiveFolderId);
     } else if (!folderId) {
@@ -279,7 +294,7 @@ app.post("/download", async (req, res) => {
       <p><a href="/">Вернуться на главную</a></p>
     `);
   } catch (error) {
-    console.error("Ошибка:", error);
+    console.error("Ошибка в POST /download:", error);
     res.send(`
       <h1>Archive Playlist</h1>
       <p>Ошибка: ${error.message}</p>
