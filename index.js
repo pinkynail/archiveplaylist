@@ -27,8 +27,22 @@ oAuth2Client.setCredentials({
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 async function getOrCreateFolder(folderName, parentId = null) {
-  const query = `name='${folderName}' mimeType='application/vnd.google-apps.folder' trashed=false${parentId ? ` '${parentId}' in parents` : ""}`;
-  const res = await drive.files.list({ q: query, fields: "files(id)" });
+  // Формируем строку поиска для параметра q
+  const query = `"${folderName}" mimeType:application/vnd.google-apps.folder`;
+
+  // Параметры запроса
+  const params = {
+    q: query,
+    fields: "files(id)",
+    trashed: false, // Фильтр "не в корзине" выносим сюда
+  };
+
+  // Если есть parentId, добавляем фильтр "in parents"
+  if (parentId) {
+    params.q += ` ${parentId} in:parents`;
+  }
+
+  const res = await drive.files.list(params);
   const folders = res.data.files;
 
   if (folders && folders.length > 0) {
