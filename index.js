@@ -1,6 +1,7 @@
 const express = require("express");
 const youtubedl = require("youtube-dl-exec");
-const fs = require("fs").promises; // Используем fs.promises
+const fsPromises = require("fs").promises; // Для асинхронных операций
+const fs = require("fs"); // Для потоков и синхронных методов
 const { google } = require("googleapis");
 const app = express();
 
@@ -37,7 +38,7 @@ const PLAYLISTS_FILE = "playlists.json";
 // Загрузка данных из файла при старте
 async function loadPlaylistsFromFile() {
   try {
-    const data = await fs.readFile(PLAYLISTS_FILE, "utf8");
+    const data = await fsPromises.readFile(PLAYLISTS_FILE, "utf8");
     playlists = JSON.parse(data);
     console.log("Загружены плейлисты из файла:", playlists);
   } catch (error) {
@@ -54,7 +55,10 @@ async function loadPlaylistsFromFile() {
 // Сохранение данных в файл
 async function savePlaylistsToFile() {
   try {
-    await fs.writeFile(PLAYLISTS_FILE, JSON.stringify(playlists, null, 2));
+    await fsPromises.writeFile(
+      PLAYLISTS_FILE,
+      JSON.stringify(playlists, null, 2),
+    );
     console.log("Плейлисты сохранены в файл:", playlists);
   } catch (error) {
     console.error("Ошибка при сохранении плейлистов в файл:", error);
@@ -192,7 +196,7 @@ app.post("/download", async (req, res) => {
 
     // Проверяем существование файла асинхронно
     try {
-      await fs.access(fileName); // Если файла нет, выбросит ошибку
+      await fsPromises.access(fileName);
     } catch (error) {
       throw new Error("Файл не найден после скачивания");
     }
@@ -210,7 +214,7 @@ app.post("/download", async (req, res) => {
     };
     const media = {
       mimeType: "audio/mp3",
-      body: fs.createReadStream(fileName),
+      body: fs.createReadStream(fileName), // Используем fs для потока
     };
     const driveResponse = await drive.files.create({
       resource: fileMetadata,
@@ -227,7 +231,7 @@ app.post("/download", async (req, res) => {
       console.log(`Добавлена песня "${title}" в плейлист "${playlist.name}"`);
     }
 
-    await fs.unlink(fileName); // Асинхронное удаление файла
+    await fsPromises.unlink(fileName); // Асинхронное удаление
 
     // Форма и список плейлистов после загрузки
     const folders = await getFolders(archiveFolderId);
