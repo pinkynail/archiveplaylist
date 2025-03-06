@@ -31,7 +31,6 @@ let archiveFolderIdCache = null;
 let playlists = [];
 const PLAYLISTS_FILE = "playlists.json";
 
-// Загрузка плейлистов из файла
 async function loadPlaylistsFromFile() {
   try {
     const data = await fsPromises.readFile(PLAYLISTS_FILE, "utf8");
@@ -48,7 +47,6 @@ async function loadPlaylistsFromFile() {
   }
 }
 
-// Сохранение плейлистов в файл
 async function savePlaylistsToFile() {
   try {
     await fsPromises.writeFile(
@@ -61,18 +59,43 @@ async function savePlaylistsToFile() {
   }
 }
 
-// Поиск или создание корневой папки
 async function initializeArchiveFolder() {
   try {
+    // Проверяем, есть ли parentId в playlists.json
+    if (playlists.length > 0) {
+      const parentIds = [...new Set(playlists.map((p) => p.parentId))];
+      if (parentIds.length === 1) {
+        archiveFolderIdCache = parentIds[0];
+        console.log(
+          "Используем parentId из playlists.json:",
+          archiveFolderIdCache,
+        );
+        // Проверяем, существует ли папка
+        const response = await drive.files.get({
+          fileId: archiveFolderIdCache,
+          fields: "id, name",
+        });
+        if (response.data.name === "ArchiveYoutubePlaylist") {
+          console.log(
+            "Подтверждена существующая ArchiveYoutubePlaylist с ID:",
+            archiveFolderIdCache,
+          );
+          return;
+        }
+      }
+    }
+
+    // Если parentId нет или он неверный, ищем или создаем
     const response = await drive.files.list({
-      q: "name='ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
+      q: "'ArchiveYoutubePlaylist' mimeType='application/vnd.google-apps.folder'",
       fields: "files(id)",
+      spaces: "drive",
     });
     const folders = response.data.files;
-    if (folders.length > 0) {
+    if (folders && folders.length > 0) {
       archiveFolderIdCache = folders[0].id;
       console.log(
-        "Найдена существующая папка ArchiveYoutubePlaylist с ID:",
+        "Найдена существующая ArchiveYoutubePlaylist с ID:",
         archiveFolderIdCache,
       );
     } else {
@@ -91,7 +114,10 @@ async function initializeArchiveFolder() {
       );
     }
   } catch (error) {
-    console.error("Ошибка при инициализации ArchiveYoutubePlaylist:", error);
+    console.error(
+      "Ошибка при инициализации ArchiveYoutubePlaylist:",
+      error.message,
+    );
     archiveFolderIdCache = await getOrCreateFolder("ArchiveYoutubePlaylist");
   }
 }
@@ -159,7 +185,6 @@ async function getFolders(parentId) {
   return folders;
 }
 
-// Инициализация при старте
 loadPlaylistsFromFile()
   .then(initializeArchiveFolder)
   .then(() => console.log("Инициализация завершена"));
