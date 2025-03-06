@@ -1,6 +1,6 @@
 const express = require("express");
 const youtubedl = require("youtube-dl-exec");
-const fs = require("fs");
+const fs = require("fs").promises; // Используем промисы для асинхронности
 const { google } = require("googleapis");
 const app = express();
 
@@ -28,8 +28,43 @@ const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 // Кэш для ID корневой папки
 let archiveFolderIdCache = null;
-// Массив для хранения плейлистов с песнями
+// Массив для хранения плейлистов
 let playlists = [];
+
+// Путь к файлу для хранения
+const PLAYLISTS_FILE = "playlists.json";
+
+// Загрузка данных из файла при старте
+async function loadPlaylistsFromFile() {
+  try {
+    const data = await fs.readFile(PLAYLISTS_FILE, "utf8");
+    playlists = JSON.parse(data);
+    console.log("Загружены плейлисты из файла:", playlists);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      console.log("Файл playlists.json не найден, начинаем с пустого списка");
+      playlists = [];
+    } else {
+      console.error("Ошибка при загрузке плейлистов из файла:", error);
+      playlists = [];
+    }
+  }
+}
+
+// Сохранение данных в файл
+async function savePlaylistsToFile() {
+  try {
+    await fs.writeFile(PLAYLISTS_FILE, JSON.stringify(playlists, null, 2));
+    console.log("Плейлисты сохранены в файл:", playlists);
+  } catch (error) {
+    console.error("Ошибка при сохранении плейлистов в файл:", error);
+  }
+}
+
+// Загружаем плейлисты при старте
+loadPlaylistsFromFile().then(() => {
+  console.log("Инициализация плейлистов завершена");
+});
 
 async function getOrCreateFolder(folderName, parentId = null) {
   try {
@@ -77,13 +112,15 @@ async function getOrCreateFolder(folderName, parentId = null) {
     }
 
     if (parentId) {
-      playlists.push({ id: folderId, name: folderName, parentId, songs: [] });
-      console.log(`Добавлен плейлист в память:`, {
+      const newPlaylist = {
         id: folderId,
         name: folderName,
         parentId,
         songs: [],
-      });
+      };
+      playlists.push(newPlaylist);
+      await savePlaylistsToFile(); // Сохраняем после создания плейлиста
+      console.log(`Добавлен плейлист в память:`, newPlaylist);
     }
 
     return folderId;
@@ -183,6 +220,7 @@ app.post("/download", async (req, res) => {
     const playlist = playlists.find((p) => p.id === folderId);
     if (playlist) {
       playlist.songs.push({ title, driveId: driveResponse.data.id });
+      await savePlaylistsToFile(); // Сохраняем после добавления песни
       console.log(`Добавлена песня "${title}" в плейлист "${playlist.name}"`);
     }
 
