@@ -17,7 +17,7 @@
           <%= error %>
         </div>
       <% } %>
-      <form method="POST" action="/protect">
+      <form method="POST" action="/protect" enctype="application/x-www-form-urlencoded">
         <div class="mb-3">
           <input type="text" name="code" class="form-control" placeholder="Введите 4-значный код" maxlength="4" required>
         </div>

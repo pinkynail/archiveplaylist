@@ -14,14 +14,18 @@ const redisClient = Redis.createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
 redisClient.on("error", (err) => console.log("Redis Client Error:", err));
-(async () => {
+
+let isReady = false;
+
+async function initializeRedis() {
   try {
     await redisClient.connect();
     console.log("Redis connected successfully");
+    isReady = true;
   } catch (err) {
     console.error("Failed to connect to Redis:", err);
   }
-})();
+}
 
 app.use(express.urlencoded({ extended: true }));
 app.use(
@@ -40,7 +44,7 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Google Drive setup с тайм-аутом
+// Google Drive setup
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const credentials = {
   web: {
@@ -61,7 +65,7 @@ oAuth2Client.setCredentials({
 const drive = google.drive({
   version: "v3",
   auth: oAuth2Client,
-  timeout: 5000, // Уменьшен до 5 секунд
+  timeout: 5000,
 });
 
 let archiveFolderIdCache = null;
@@ -72,6 +76,7 @@ async function initializeArchiveFolder() {
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   try {
     await drive.files.get({ fileId: archiveFolderIdCache });
+    console.log("Folder verified:", archiveFolderIdCache);
   } catch (error) {
     console.error("Error verifying folder:", error.message);
     throw new Error("Указанный ID папки недоступен");
@@ -192,7 +197,7 @@ async function clearAllPlaylists() {
   }
 }
 
-// Middleware для логирования всех запросов
+// Middleware для логирования
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.url} - Started`);
   const originalEnd = res.end;
@@ -205,7 +210,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", (req, res) => res.send("OK"));
+app.get("/health", (req, res) => {
+  console.log("Health check requested");
+  if (!isReady) {
+    console.log("Server not ready, delaying response");
+    return setTimeout(() => res.send("OK"), 2000); // Задержка 2 секунды
+  }
+  res.send("OK");
+});
 
 app.get("/protect", async (req, res) => {
   console.log("GET /protect: Rendering protect page");
@@ -245,6 +257,7 @@ app.get("/", async (req, res) => {
     console.log("Calling initializeArchiveFolder...");
     const archiveFolderId = await initializeArchiveFolder();
     console.log("Calling getFolders with archiveFolderId:", archiveFolderId);
+    if (playlists.length === 0) await loadPlaylistsFromDrive();
     const folders = (await getFolders(archiveFolderId)) || [];
     console.log("Rendering index with folders:", folders.length, "folders");
     res.render("index", { folders });
@@ -317,14 +330,11 @@ app.post("/clear", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 10000; // Явно указываем порт Render
+const PORT = parseInt(process.env.PORT, 10) || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log("Server ready to accept requests");
+  initializeRedis().then(() => {
+    console.log("Server fully initialized and ready");
+    isReady = true;
+  });
 });
-
-// Ленивая загрузка плейлистов
-setTimeout(async () => {
-  await loadPlaylistsFromDrive();
-  console.log("Playlists loaded lazily");
-}, 1000);
