@@ -4,9 +4,18 @@ const fsPromises = require("fs").promises;
 const fs = require("fs");
 const { google } = require("googleapis");
 const path = require("path");
+const session = require("express-session"); // Добавляем express-session
 const app = express();
 
+// Настройка сессий
 app.use(express.urlencoded({ extended: true }));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "your-secret-key", // Используем env или дефолт
+    resave: false,
+    saveUninitialized: false,
+  }),
+);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.static(path.join(__dirname, "public")));
@@ -38,23 +47,25 @@ let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
 async function initializeArchiveFolder() {
   if (archiveFolderIdCache) {
     console.log(
-      "ArchiveYoutubePlaylist уже инициализирована с ID:",
-      archiveFolderIdCache,
+      `[${new Date().toISOString()}] ArchiveYoutubePlaylist уже инициализирована с ID: ${archiveFolderIdCache}`,
     );
     return archiveFolderIdCache;
   }
 
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   console.log(
-    "Используем существующую ArchiveYoutubePlaylist с ID:",
-    archiveFolderIdCache,
+    `[${new Date().toISOString()}] Используем существующую ArchiveYoutubePlaylist с ID: ${archiveFolderIdCache}`,
   );
 
   try {
     await drive.files.get({ fileId: archiveFolderIdCache });
-    console.log("Папка подтверждена:", archiveFolderIdCache);
+    console.log(
+      `[${new Date().toISOString()}] Папка подтверждена: ${archiveFolderIdCache}`,
+    );
   } catch (error) {
-    console.error("Ошибка при проверке папки:", error.message);
+    console.error(
+      `[${new Date().toISOString()}] Ошибка при проверке папки: ${error.message}`,
+    );
     throw new Error("Указанный ID папки недоступен");
   }
 
@@ -62,31 +73,48 @@ async function initializeArchiveFolder() {
 }
 
 async function loadPlaylistsFromDrive() {
-  console.log("Попытка загрузить playlists.json с Google Drive...");
+  console.log(
+    `[${new Date().toISOString()}] Попытка загрузить playlists.json с Google Drive...`,
+  );
   try {
     if (!archiveFolderIdCache) {
-      console.log("archiveFolderIdCache не установлен, инициализируем...");
+      console.log(
+        `[${new Date().toISOString()}] archiveFolderIdCache не установлен, инициализируем...`,
+      );
       await initializeArchiveFolder();
     }
-    console.log("Загрузка playlists.json с ID:", playlistsFileId);
+    console.log(
+      `[${new Date().toISOString()}] Загрузка playlists.json с ID: ${playlistsFileId}`,
+    );
     const file = await drive.files.get({
       fileId: playlistsFileId,
       alt: "media",
     });
     playlists = file.data || [];
-    console.log("Успешно загружены плейлисты из Google Drive:", playlists);
+    console.log(
+      `[${new Date().toISOString()}] Успешно загружены плейлисты из Google Drive:`,
+      playlists,
+    );
   } catch (error) {
-    console.error("Ошибка при загрузке плейлистов:", error.message);
-    console.log("Используем пустой массив из-за ошибки...");
+    console.error(
+      `[${new Date().toISOString()}] Ошибка при загрузке плейлистов: ${error.message}`,
+    );
+    console.log(
+      `[${new Date().toISOString()}] Используем пустой массив из-за ошибки...`,
+    );
     playlists = [];
   }
 }
 
 async function savePlaylistsToDrive() {
-  console.log("Сохранение playlists.json на Google Drive...");
+  console.log(
+    `[${new Date().toISOString()}] Сохранение playlists.json на Google Drive...`,
+  );
   try {
     if (!archiveFolderIdCache) {
-      console.log("archiveFolderIdCache не установлен, инициализируем...");
+      console.log(
+        `[${new Date().toISOString()}] archiveFolderIdCache не установлен, инициализируем...`,
+      );
       await initializeArchiveFolder();
     }
     const fileMetadata = {
@@ -106,8 +134,7 @@ async function savePlaylistsToDrive() {
         fields: "id",
       });
       console.log(
-        "Обновлён playlists.json на Google Drive, ID:",
-        updatedFile.data.id,
+        `[${new Date().toISOString()}] Обновлён playlists.json на Google Drive, ID: ${updatedFile.data.id}`,
       );
     } else {
       const newFile = await drive.files.create({
@@ -117,12 +144,13 @@ async function savePlaylistsToDrive() {
       });
       playlistsFileId = newFile.data.id;
       console.log(
-        "Создан playlists.json на Google Drive, ID:",
-        playlistsFileId,
+        `[${new Date().toISOString()}] Создан playlists.json на Google Drive, ID: ${playlistsFileId}`,
       );
     }
   } catch (error) {
-    console.error("Ошибка при сохранении playlists.json:", error.message);
+    console.error(
+      `[${new Date().toISOString()}] Ошибка при сохранении playlists.json: ${error.message}`,
+    );
   }
 }
 
@@ -134,8 +162,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
       !parentId
     ) {
       console.log(
-        "Используем кэшированный ID для ArchiveYoutubePlaylist:",
-        archiveFolderIdCache,
+        `[${new Date().toISOString()}] Используем кэшированный ID для ArchiveYoutubePlaylist: ${archiveFolderIdCache}`,
       );
       return archiveFolderIdCache;
     }
@@ -146,8 +173,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
       );
       if (existingPlaylist) {
         console.log(
-          `Используем существующий плейлист "${folderName}" с ID:`,
-          existingPlaylist.id,
+          `[${new Date().toISOString()}] Используем существующий плейлист "${folderName}" с ID: ${existingPlaylist.id}`,
         );
         return existingPlaylist.id;
       }
@@ -164,7 +190,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
     });
     const folderId = folder.data.id;
     console.log(
-      `Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`,
+      `[${new Date().toISOString()}] Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`,
     );
 
     if (parentId) {
@@ -180,7 +206,9 @@ async function getOrCreateFolder(folderName, parentId = null) {
 
     return folderId;
   } catch (error) {
-    console.error(`Ошибка при создании папки "${folderName}":`, error.message);
+    console.error(
+      `[${new Date().toISOString()}] Ошибка при создании папки "${folderName}": ${error.message}`,
+    );
     throw error;
   }
 }
@@ -188,10 +216,15 @@ async function getOrCreateFolder(folderName, parentId = null) {
 async function getFolders(parentId) {
   try {
     const folders = playlists.filter((p) => p.parentId === parentId);
-    console.log(`Плейлисты из памяти для ${parentId}:`, folders);
+    console.log(
+      `[${new Date().toISOString()}] Плейлисты из памяти для ${parentId}:`,
+      folders,
+    );
     return folders || [];
   } catch (error) {
-    console.error("Ошибка в getFolders:", error.message);
+    console.error(
+      `[${new Date().toISOString()}] Ошибка в getFolders: ${error.message}`,
+    );
     return [];
   }
 }
@@ -201,26 +234,44 @@ app.get("/health", (req, res) => {
   res.send("OK");
 });
 
-// Инициализация
-(async () => {
-  await initializeArchiveFolder();
-  await loadPlaylistsFromDrive();
-  console.log("Инициализация завершена");
-})();
+// Защита с кодом
+app.get("/protect", (req, res) => {
+  res.render("protect");
+});
 
+app.post("/protect", (req, res) => {
+  const enteredCode = req.body.code;
+  const protectionCode = process.env.PROTECTION_CODE || "1234"; // По умолчанию 1234
+  if (enteredCode === protectionCode) {
+    req.session.authorized = true;
+    res.redirect("/");
+  } else {
+    res.render("protect", { error: "Неверный код" });
+  }
+});
+
+// Главная страница
 app.get("/", async (req, res) => {
+  if (!req.session.authorized) {
+    return res.redirect("/protect");
+  }
   try {
     const archiveFolderId = await initializeArchiveFolder();
     const folders = (await getFolders(archiveFolderId)) || [];
-    console.log("Folders for render:", folders);
+    console.log(`[${new Date().toISOString()}] Folders for render:`, folders);
     res.render("index", { folders });
   } catch (error) {
-    console.error("Ошибка в GET /:", error.message);
+    console.error(
+      `[${new Date().toISOString()}] Ошибка в GET /: ${error.message}`,
+    );
     res.status(500).render("error", { message: error.message });
   }
 });
 
 app.post("/download", async (req, res) => {
+  if (!req.session.authorized) {
+    return res.redirect("/protect");
+  }
   const youtubeUrl = req.body.youtube_url;
   const newFolderName = req.body.new_folder_name;
   let folderId = req.body.folder_id;
@@ -239,7 +290,7 @@ app.post("/download", async (req, res) => {
       output: fileName,
       cookies: "cookies.txt",
     });
-    console.log("Скачано:", youtubeUrl);
+    console.log(`[${new Date().toISOString()}] Скачано: ${youtubeUrl}`);
 
     await fsPromises.access(fileName);
 
@@ -260,13 +311,17 @@ app.post("/download", async (req, res) => {
       media: media,
       fields: "id",
     });
-    console.log("Загружено на Drive, ID:", driveResponse.data.id);
+    console.log(
+      `[${new Date().toISOString()}] Загружено на Drive, ID: ${driveResponse.data.id}`,
+    );
 
     const playlist = playlists.find((p) => p.id === folderId);
     if (playlist) {
       playlist.songs.push({ title, driveId: driveResponse.data.id });
       await savePlaylistsToDrive();
-      console.log(`Добавлена песня "${title}" в плейлист "${playlist.name}"`);
+      console.log(
+        `[${new Date().toISOString()}] Добавлена песня "${title}" в плейлист "${playlist.name}"`,
+      );
     }
 
     await fsPromises.unlink(fileName);
@@ -274,11 +329,20 @@ app.post("/download", async (req, res) => {
     const folders = await getFolders(archiveFolderId);
     res.render("success", { title, driveId: driveResponse.data.id, folders });
   } catch (error) {
-    console.error("Ошибка в POST /download:", error.message);
+    console.error(
+      `[${new Date().toISOString()}] Ошибка в POST /download: ${error.message}`,
+    );
     res.status(500).render("error", { message: error.message });
   }
 });
 
 app.listen(3000, () => {
-  console.log("Server running on port 3000");
+  console.log(`[${new Date().toISOString()}] Server running on port 3000`);
 });
+
+// Инициализация
+(async () => {
+  await initializeArchiveFolder();
+  await loadPlaylistsFromDrive();
+  console.log(`[${new Date().toISOString()}] Инициализация завершена`);
+})();
