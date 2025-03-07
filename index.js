@@ -6,10 +6,11 @@ const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
 const Redis = require("redis");
-const RedisStore = require("connect-redis")(session); // Исправление: передаём session
+const connectRedis = require("connect-redis"); // Импорт без вызова
 const app = express();
 
 // Настройка Redis
+const RedisStore = connectRedis(session); // Инициализация RedisStore
 const redisClient = Redis.createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
