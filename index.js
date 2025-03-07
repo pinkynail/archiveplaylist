@@ -22,7 +22,7 @@ let playlists = [];
 async function initializeRedis() {
   try {
     await redisClient.connect();
-    console.log("Redis connected successfully");
+    console.log("Redis connected successfully at", new Date().toISOString());
     isReady = true;
   } catch (err) {
     console.error("Failed to connect to Redis:", err);
@@ -75,7 +75,7 @@ async function initializeArchiveFolder() {
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   try {
     await drive.files.get({ fileId: archiveFolderIdCache });
-    console.log("Folder verified:", archiveFolderIdCache);
+    console.log("Folder verified at:", new Date().toISOString());
   } catch (error) {
     console.error("Error verifying folder:", error.message);
     throw new Error("Указанный ID папки недоступен");
@@ -92,7 +92,7 @@ async function loadPlaylistsFromDrive() {
       alt: "media",
     });
     playlists = file.data || [];
-    console.log("Playlists loaded:", playlists);
+    console.log("Playlists loaded at:", new Date().toISOString(), playlists);
   } catch (error) {
     console.error("Error loading playlists:", error.message);
     playlists = [];
@@ -198,31 +198,39 @@ async function clearAllPlaylists() {
 
 // Middleware для логирования
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url} - Started`);
+  console.log(
+    `${req.method} ${req.url} - Started at ${new Date().toISOString()}`,
+  );
   const originalEnd = res.end;
   res.end = function (...args) {
     console.log(
-      `${req.method} ${req.url} - Finished with status ${res.statusCode}`,
+      `${req.method} ${req.url} - Finished with status ${res.statusCode} at ${new Date().toISOString()}`,
     );
     originalEnd.apply(res, args);
   };
   next();
 });
 
-// Проверка готовности
+app.get("/health", (req, res) => {
+  console.log("Health check requested at:", new Date().toISOString());
+  res.status(200).send("OK"); // Гарантированный 200 статус
+});
+
 app.get("/ready", (req, res) => {
-  console.log("Ready check requested");
+  console.log("Ready check requested at:", new Date().toISOString());
   res.send(isReady ? "Ready" : "Not Ready");
 });
 
-// Минимальная стартовая страница
 app.get("/", (req, res) => {
   console.log("GET /: Redirecting to /protect for initial session check");
   res.redirect("/protect");
 });
 
 app.get("/protect", async (req, res) => {
-  console.log("GET /protect: Rendering protect page");
+  console.log(
+    "GET /protect: Rendering protect page at:",
+    new Date().toISOString(),
+  );
   try {
     res.render("protect", { error: null });
   } catch (error) {
@@ -232,44 +240,83 @@ app.get("/protect", async (req, res) => {
 });
 
 app.post("/protect", async (req, res) => {
-  console.log("POST /protect: Received request with body:", req.body);
+  console.log(
+    "POST /protect: Received request with body:",
+    req.body,
+    "at:",
+    new Date().toISOString(),
+  );
   const enteredCode = req.body.code;
   const protectionCode = process.env.PROTECTION_CODE || "1234";
   if (enteredCode === protectionCode) {
-    console.log("Code correct, setting session.authorized to true");
+    console.log(
+      "Code correct, setting session.authorized to true at:",
+      new Date().toISOString(),
+    );
     req.session.authorized = true;
     try {
       await req.session.save();
-      console.log("Session saved, session data:", req.session);
-      console.log("Redirecting to /main");
+      console.log(
+        "Session saved, session data:",
+        req.session,
+        "at:",
+        new Date().toISOString(),
+      );
+      console.log("Redirecting to /main at:", new Date().toISOString());
       res.redirect("/main");
     } catch (err) {
-      console.error("Error saving session:", err);
+      console.error(
+        "Error saving session:",
+        err,
+        "at:",
+        new Date().toISOString(),
+      );
       res.status(500).render("error", { message: "Ошибка сохранения сессии" });
     }
   } else {
-    console.log("Code incorrect");
+    console.log("Code incorrect at:", new Date().toISOString());
     res.render("protect", { error: "Неверный код" });
   }
 });
 
 app.get("/main", async (req, res) => {
-  console.log("GET /main: Checking session...");
-  console.log("Session data:", req.session);
+  console.log("GET /main: Checking session at:", new Date().toISOString());
+  console.log("Session data:", req.session, "at:", new Date().toISOString());
   if (!req.session.authorized) {
-    console.log("Not authorized, redirecting to /protect");
+    console.log(
+      "Not authorized, redirecting to /protect at:",
+      new Date().toISOString(),
+    );
     return res.redirect("/protect");
   }
   try {
-    console.log("Calling initializeArchiveFolder...");
+    console.log(
+      "Calling initializeArchiveFolder at:",
+      new Date().toISOString(),
+    );
     const archiveFolderId = await initializeArchiveFolder();
     if (playlists.length === 0) await loadPlaylistsFromDrive();
-    console.log("Calling getFolders with archiveFolderId:", archiveFolderId);
+    console.log(
+      "Calling getFolders with archiveFolderId:",
+      archiveFolderId,
+      "at:",
+      new Date().toISOString(),
+    );
     const folders = (await getFolders(archiveFolderId)) || [];
-    console.log("Rendering index with folders:", folders.length, "folders");
+    console.log(
+      "Rendering index with folders:",
+      folders.length,
+      "folders at:",
+      new Date().toISOString(),
+    );
     res.render("index", { folders });
   } catch (error) {
-    console.error("Error in GET /main:", error.message);
+    console.error(
+      "Error in GET /main:",
+      error.message,
+      "at:",
+      new Date().toISOString(),
+    );
     res.status(500).render("error", { message: error.message });
   }
 });
@@ -339,9 +386,12 @@ app.post("/clear", async (req, res) => {
 
 const PORT = parseInt(process.env.PORT, 10) || 10000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT} at ${new Date().toISOString()}`);
   initializeRedis().then(() => {
-    console.log("Server fully initialized and ready");
+    console.log(
+      "Server fully initialized and ready at:",
+      new Date().toISOString(),
+    );
     isReady = true;
   });
 });
