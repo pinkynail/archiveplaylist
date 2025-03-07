@@ -44,14 +44,12 @@ async function initializeArchiveFolder() {
     return archiveFolderIdCache;
   }
 
-  // Жёстко задаём существующий ID
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   console.log(
     "Используем существующую ArchiveYoutubePlaylist с ID:",
     archiveFolderIdCache,
   );
 
-  // Проверяем доступность папки
   try {
     await drive.files.get({ fileId: archiveFolderIdCache });
     console.log("Папка подтверждена:", archiveFolderIdCache);
@@ -72,7 +70,7 @@ async function loadPlaylistsFromDrive() {
     }
     console.log("Поиск playlists.json в папке:", archiveFolderIdCache);
     const response = await drive.files.list({
-      q: `'${archiveFolderIdCache}' in parents name='playlists.json'`,
+      q: `name='playlists.json' '${archiveFolderIdCache}' in parents`, // Исправленный порядок
       fields: "files(id, name)",
       spaces: "drive",
     });
@@ -86,14 +84,13 @@ async function loadPlaylistsFromDrive() {
       playlists = file.data || [];
       console.log("Успешно загружены плейлисты из Google Drive:", playlists);
     } else {
-      console.log("Файл playlists.json не найден, создаём новый...");
+      console.log("Файл playlists.json не найден, используем пустой массив...");
       playlists = [];
-      await savePlaylistsToDrive();
     }
   } catch (error) {
     console.error("Ошибка при загрузке плейлистов:", error.message);
+    console.log("Используем пустой массив из-за ошибки...");
     playlists = [];
-    await savePlaylistsToDrive();
   }
 }
 
