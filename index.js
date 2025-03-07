@@ -6,12 +6,10 @@ const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
 const Redis = require("redis");
-const connectRedis = require("connect-redis");
-
+const RedisStore = require("connect-redis")(session); // Старая версия connect-redis
 const app = express();
 
 // Настройка Redis
-const RedisStore = connectRedis.default(session); // Исправление: используем .default
 const redisClient = Redis.createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
@@ -264,7 +262,6 @@ app.post("/clear", async (req, res) => {
   }
 });
 
-// Указываем порт, который ожидает Render
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
