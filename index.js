@@ -16,6 +16,8 @@ const redisClient = Redis.createClient({
 redisClient.on("error", (err) => console.log("Redis Client Error:", err));
 
 let isReady = false;
+let archiveFolderIdCache = null;
+let playlists = [];
 
 async function initializeRedis() {
   try {
@@ -67,9 +69,6 @@ const drive = google.drive({
   auth: oAuth2Client,
   timeout: 5000,
 });
-
-let archiveFolderIdCache = null;
-let playlists = [];
 
 async function initializeArchiveFolder() {
   if (archiveFolderIdCache) return archiveFolderIdCache;
@@ -210,18 +209,26 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", (req, res) => {
-  console.log("Health check requested");
-  if (!isReady) {
-    console.log("Server not ready, delaying response");
-    return setTimeout(() => res.send("OK"), 2000); // Задержка 2 секунды
-  }
-  res.send("OK");
+// Проверка готовности
+app.get("/ready", (req, res) => {
+  console.log("Ready check requested");
+  res.send(isReady ? "Ready" : "Not Ready");
+});
+
+// Минимальная стартовая страница
+app.get("/", (req, res) => {
+  console.log("GET /: Redirecting to /protect for initial session check");
+  res.redirect("/protect");
 });
 
 app.get("/protect", async (req, res) => {
   console.log("GET /protect: Rendering protect page");
-  res.render("protect", { error: null });
+  try {
+    res.render("protect", { error: null });
+  } catch (error) {
+    console.error("EJS render error for /protect:", error.message);
+    res.status(500).send("Ошибка рендеринга страницы");
+  }
 });
 
 app.post("/protect", async (req, res) => {
@@ -234,8 +241,8 @@ app.post("/protect", async (req, res) => {
     try {
       await req.session.save();
       console.log("Session saved, session data:", req.session);
-      console.log("Redirecting to /");
-      res.redirect("/");
+      console.log("Redirecting to /main");
+      res.redirect("/main");
     } catch (err) {
       console.error("Error saving session:", err);
       res.status(500).render("error", { message: "Ошибка сохранения сессии" });
@@ -246,8 +253,8 @@ app.post("/protect", async (req, res) => {
   }
 });
 
-app.get("/", async (req, res) => {
-  console.log("GET /: Checking session...");
+app.get("/main", async (req, res) => {
+  console.log("GET /main: Checking session...");
   console.log("Session data:", req.session);
   if (!req.session.authorized) {
     console.log("Not authorized, redirecting to /protect");
@@ -256,13 +263,13 @@ app.get("/", async (req, res) => {
   try {
     console.log("Calling initializeArchiveFolder...");
     const archiveFolderId = await initializeArchiveFolder();
-    console.log("Calling getFolders with archiveFolderId:", archiveFolderId);
     if (playlists.length === 0) await loadPlaylistsFromDrive();
+    console.log("Calling getFolders with archiveFolderId:", archiveFolderId);
     const folders = (await getFolders(archiveFolderId)) || [];
     console.log("Rendering index with folders:", folders.length, "folders");
     res.render("index", { folders });
   } catch (error) {
-    console.error("Error in GET /:", error.message);
+    console.error("Error in GET /main:", error.message);
     res.status(500).render("error", { message: error.message });
   }
 });
@@ -324,7 +331,7 @@ app.post("/clear", async (req, res) => {
   if (!req.session.authorized) return res.redirect("/protect");
   try {
     await clearAllPlaylists();
-    res.redirect("/");
+    res.redirect("/main");
   } catch (error) {
     res.status(500).render("error", { message: error.message });
   }
