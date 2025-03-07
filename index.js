@@ -244,7 +244,7 @@ app.get("/", async (req, res) => {
     const archiveFolderId = await initializeArchiveFolder();
     console.log("Calling getFolders with archiveFolderId:", archiveFolderId);
     const folders = (await getFolders(archiveFolderId)) || [];
-    console.log("Rendering index with folders:", folders);
+    console.log("Rendering index with folders:", folders.length, "folders");
     res.render("index", { folders });
   } catch (error) {
     console.error("Error in GET /:", error.message);
