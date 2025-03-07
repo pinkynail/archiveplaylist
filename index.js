@@ -6,16 +6,19 @@ const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
 const Redis = require("redis");
-const connectRedis = require("connect-redis"); // Импорт без вызова
+const connectRedis = require("connect-redis");
+
 const app = express();
 
 // Настройка Redis
-const RedisStore = connectRedis(session); // Инициализация RedisStore
+const RedisStore = connectRedis.default(session); // Исправление: используем .default
 const redisClient = Redis.createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
 redisClient.on("error", (err) => console.log("Redis Client Error", err));
-redisClient.connect().catch(console.error);
+(async () => {
+  await redisClient.connect();
+})();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(
@@ -261,7 +264,9 @@ app.post("/clear", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+// Указываем порт, который ожидает Render
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 (async () => {
   await initializeArchiveFolder();
