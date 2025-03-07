@@ -38,7 +38,38 @@ let initializingPromise = null;
 
 // Функции Google Drive (оставляем без изменений)
 async function loadPlaylistsFromDrive() {
-  /* ... */
+  console.log("Попытка загрузить playlists.json с Google Drive...");
+  try {
+    if (!archiveFolderIdCache) await initializeArchiveFolder();
+    const response = await drive.files.list({
+      q: `name='playlists.json' '${archiveFolderIdCache}' in parents`,
+      fields: "files(id, name)",
+      spaces: "drive",
+    });
+    const files = response.data.files;
+    if (files && files.length > 0) {
+      playlistsFileId = files[0].id;
+      const file = await drive.files.get({
+        fileId: playlistsFileId,
+        alt: "media",
+      });
+      playlists = file.data || []; // Если файл пустой, возвращаем пустой массив
+      console.log("Успешно загружены плейлисты из Google Drive:", playlists);
+    } else {
+      console.log(
+        "Файл playlists.json не найден на Google Drive, создаём новый...",
+      );
+      playlists = [];
+      await savePlaylistsToDrive();
+    }
+  } catch (error) {
+    console.error(
+      "Ошибка при загрузке плейлистов с Google Drive:",
+      error.message,
+    );
+    playlists = [];
+    await savePlaylistsToDrive();
+  }
 }
 async function savePlaylistsToDrive() {
   /* ... */
@@ -50,7 +81,14 @@ async function getOrCreateFolder(folderName, parentId = null) {
   /* ... */
 }
 async function getFolders(parentId) {
-  /* ... */
+  try {
+    const folders = playlists.filter((p) => p.parentId === parentId);
+    console.log(`Плейлисты из памяти для ${parentId}:`, folders);
+    return folders || []; // Если фильтр ничего не нашёл, возвращаем пустой массив
+  } catch (error) {
+    console.error("Ошибка в getFolders:", error.message);
+    return []; // В случае ошибки возвращаем пустой массив
+  }
 }
 
 (async () => {
@@ -62,11 +100,12 @@ async function getFolders(parentId) {
 app.get("/", async (req, res) => {
   try {
     const archiveFolderId = await initializeArchiveFolder();
-    const folders = await getFolders(archiveFolderId);
+    const folders = (await getFolders(archiveFolderId)) || []; // Если undefined, возвращаем пустой массив
+    console.log("Folders for render:", folders); // Логируем для отладки
     res.render("index", { folders });
   } catch (error) {
-    console.error("Ошибка в GET /:", error);
-    res.send(`Ошибка: ${error.message}`);
+    console.error("Ошибка в GET /:", error.message); // Более точный лог
+    res.status(500).render("error", { message: error.message }); // Отдельный шаблон для ошибок
   }
 });
 

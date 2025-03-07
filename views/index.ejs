@@ -18,9 +18,11 @@
         <label class="form-label">Выбери плейлист:</label>
         <select name="folder_id" class="form-select">
           <option value="">Создать новый плейлист</option>
-          <% folders.forEach(folder => { %>
-            <option value="<%= folder.id %>"><%= folder.name %></option>
-          <% }) %>
+          <% if (folders && folders.length > 0) { %>
+            <% folders.forEach(folder => { %>
+              <option value="<%= folder.id %>"><%= folder.name %></option>
+            <% }) %>
+          <% } %>
         </select>
       </div>
       <div class="mb-3">
@@ -30,7 +32,7 @@
     </form>
     <h2>Существующие плейлисты:</h2>
     <ul class="list-group">
-      <% if (folders.length === 0) { %>
+      <% if (!folders || folders.length === 0) { %>
         <li class="list-group-item">Плейлистов пока нет</li>
       <% } else { %>
         <% folders.forEach(folder => { %>
