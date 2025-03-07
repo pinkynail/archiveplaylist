@@ -5,14 +5,25 @@ const fs = require("fs");
 const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
+const Redis = require("redis");
+const RedisStore = require("connect-redis").default;
 const app = express();
+
+// Настройка Redis
+const redisClient = Redis.createClient({
+  url: process.env.REDIS_URL || "redis://localhost:6379", // Используй REDIS_URL из Render
+});
+redisClient.on("error", (err) => console.log("Redis Client Error", err));
+redisClient.connect();
 
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
+    store: new RedisStore({ client: redisClient }),
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
     saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === "production" }, // secure: true в продакшене
   }),
 );
 app.set("view engine", "ejs");
@@ -143,6 +154,24 @@ async function getFolders(parentId) {
   }
 }
 
+// Добавим функцию очистки
+async function clearAllPlaylists() {
+  try {
+    if (!archiveFolderIdCache) await initializeArchiveFolder();
+    playlists = [];
+    await savePlaylistsToDrive();
+    const files = await drive.files.list({
+      q: `'${archiveFolderIdCache}' in parents and mimeType='application/vnd.google-apps.folder'`,
+      fields: "files(id)",
+    });
+    for (const file of files.data.files) {
+      await drive.files.delete({ fileId: file.id });
+    }
+  } catch (error) {
+    throw error;
+  }
+}
+
 app.get("/health", (req, res) => res.send("OK"));
 
 app.get("/protect", (req, res) => res.render("protect", { error: null }));
@@ -217,6 +246,17 @@ app.post("/download", async (req, res) => {
     await fsPromises.unlink(fileName);
     const folders = await getFolders(archiveFolderId);
     res.render("success", { title, driveId: driveResponse.data.id, folders });
+  } catch (error) {
+    res.status(500).render("error", { message: error.message });
+  }
+});
+
+// Новый маршрут для очистки
+app.post("/clear", async (req, res) => {
+  if (!req.session.authorized) return res.redirect("/protect");
+  try {
+    await clearAllPlaylists();
+    res.redirect("/");
   } catch (error) {
     res.status(500).render("error", { message: error.message });
   }
