@@ -4,14 +4,14 @@ const fsPromises = require("fs").promises;
 const fs = require("fs");
 const { google } = require("googleapis");
 const path = require("path");
-const session = require("express-session"); // Добавляем express-session
+const session = require("express-session");
 const app = express();
 
 // Настройка сессий
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "your-secret-key", // Используем env или дефолт
+    secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
     saveUninitialized: false,
   }),
@@ -231,28 +231,41 @@ async function getFolders(parentId) {
 
 // Health Check эндпоинт
 app.get("/health", (req, res) => {
+  console.log(`[${new Date().toISOString()}] Health check requested`);
   res.send("OK");
 });
 
 // Защита с кодом
 app.get("/protect", (req, res) => {
-  res.render("protect");
+  console.log(
+    `[${new Date().toISOString()}] GET /protect - Rendering protect page`,
+  );
+  res.render("protect", { error: null }); // Добавляем error: null
 });
 
 app.post("/protect", (req, res) => {
+  console.log(
+    `[${new Date().toISOString()}] POST /protect - Code submitted: ${req.body.code}`,
+  );
   const enteredCode = req.body.code;
-  const protectionCode = process.env.PROTECTION_CODE || "1234"; // По умолчанию 1234
+  const protectionCode = process.env.PROTECTION_CODE || "1234";
   if (enteredCode === protectionCode) {
     req.session.authorized = true;
+    console.log(`[${new Date().toISOString()}] Code correct, redirecting to /`);
     res.redirect("/");
   } else {
+    console.log(`[${new Date().toISOString()}] Code incorrect`);
     res.render("protect", { error: "Неверный код" });
   }
 });
 
 // Главная страница
 app.get("/", async (req, res) => {
+  console.log(`[${new Date().toISOString()}] GET / - Checking authorization`);
   if (!req.session.authorized) {
+    console.log(
+      `[${new Date().toISOString()}] Not authorized, redirecting to /protect`,
+    );
     return res.redirect("/protect");
   }
   try {
@@ -269,7 +282,13 @@ app.get("/", async (req, res) => {
 });
 
 app.post("/download", async (req, res) => {
+  console.log(
+    `[${new Date().toISOString()}] POST /download - Checking authorization`,
+  );
   if (!req.session.authorized) {
+    console.log(
+      `[${new Date().toISOString()}] Not authorized, redirecting to /protect`,
+    );
     return res.redirect("/protect");
   }
   const youtubeUrl = req.body.youtube_url;
