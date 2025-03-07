@@ -222,7 +222,7 @@ app.get("/protect", (req, res) => {
 });
 
 app.post("/protect", async (req, res) => {
-  console.log("POST /protect: Code entered:", req.body.code);
+  console.log("POST /protect: Received request with body:", req.body);
   const enteredCode = req.body.code;
   const protectionCode = process.env.PROTECTION_CODE || "1234";
   if (enteredCode === protectionCode) {
@@ -230,7 +230,8 @@ app.post("/protect", async (req, res) => {
     req.session.authorized = true;
     try {
       await req.session.save(); // Явно сохраняем сессию
-      console.log("Session saved, redirecting to /");
+      console.log("Session saved, session data:", req.session);
+      console.log("Redirecting to /");
       res.redirect("/");
     } catch (err) {
       console.error("Error saving session:", err);
