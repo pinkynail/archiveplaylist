@@ -30,7 +30,10 @@ app.use(
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production" },
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 24 * 60 * 60 * 1000, // 24 часа
+    },
   }),
 );
 app.set("view engine", "ejs");
@@ -218,15 +221,21 @@ app.get("/protect", (req, res) => {
   res.render("protect", { error: null });
 });
 
-app.post("/protect", (req, res) => {
+app.post("/protect", async (req, res) => {
   console.log("POST /protect: Code entered:", req.body.code);
   const enteredCode = req.body.code;
   const protectionCode = process.env.PROTECTION_CODE || "1234";
   if (enteredCode === protectionCode) {
     console.log("Code correct, setting session.authorized to true");
     req.session.authorized = true;
-    console.log("Redirecting to /");
-    res.redirect("/");
+    try {
+      await req.session.save(); // Явно сохраняем сессию
+      console.log("Session saved, redirecting to /");
+      res.redirect("/");
+    } catch (err) {
+      console.error("Error saving session:", err);
+      res.status(500).render("error", { message: "Ошибка сохранения сессии" });
+    }
   } else {
     console.log("Code incorrect");
     res.render("protect", { error: "Неверный код" });
@@ -235,6 +244,7 @@ app.post("/protect", (req, res) => {
 
 app.get("/", async (req, res) => {
   console.log("GET /: Checking session...");
+  console.log("Session data:", req.session);
   if (!req.session.authorized) {
     console.log("Not authorized, redirecting to /protect");
     return res.redirect("/protect");
