@@ -21,22 +21,34 @@ const credentials = {
   },
 };
 const { client_secret, client_id, redirect_uris } = credentials.web;
-const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-oAuth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+const oAuth2Client = new google.auth.OAuth2(
+  client_id,
+  client_secret,
+  redirect_uris[0],
+);
+oAuth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
 const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 let archiveFolderIdCache = null;
 let playlists = [];
-let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs"; // Жёстко заданный ID существующего playlists.json
+let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
 
 async function initializeArchiveFolder() {
   if (archiveFolderIdCache) {
-    console.log("ArchiveYoutubePlaylist уже инициализирована с ID:", archiveFolderIdCache);
+    console.log(
+      "ArchiveYoutubePlaylist уже инициализирована с ID:",
+      archiveFolderIdCache,
+    );
     return archiveFolderIdCache;
   }
 
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
-  console.log("Используем существующую ArchiveYoutubePlaylist с ID:", archiveFolderIdCache);
+  console.log(
+    "Используем существующую ArchiveYoutubePlaylist с ID:",
+    archiveFolderIdCache,
+  );
 
   try {
     await drive.files.get({ fileId: archiveFolderIdCache });
@@ -57,7 +69,10 @@ async function loadPlaylistsFromDrive() {
       await initializeArchiveFolder();
     }
     console.log("Загрузка playlists.json с ID:", playlistsFileId);
-    const file = await drive.files.get({ fileId: playlistsFileId, alt: "media" });
+    const file = await drive.files.get({
+      fileId: playlistsFileId,
+      alt: "media",
+    });
     playlists = file.data || [];
     console.log("Успешно загружены плейлисты из Google Drive:", playlists);
   } catch (error) {
@@ -90,7 +105,10 @@ async function savePlaylistsToDrive() {
         media,
         fields: "id",
       });
-      console.log("Обновлён playlists.json на Google Drive, ID:", updatedFile.data.id);
+      console.log(
+        "Обновлён playlists.json на Google Drive, ID:",
+        updatedFile.data.id,
+      );
     } else {
       const newFile = await drive.files.create({
         resource: fileMetadata,
@@ -98,7 +116,10 @@ async function savePlaylistsToDrive() {
         fields: "id",
       });
       playlistsFileId = newFile.data.id;
-      console.log("Создан playlists.json на Google Drive, ID:", playlistsFileId);
+      console.log(
+        "Создан playlists.json на Google Drive, ID:",
+        playlistsFileId,
+      );
     }
   } catch (error) {
     console.error("Ошибка при сохранении playlists.json:", error.message);
@@ -107,15 +128,27 @@ async function savePlaylistsToDrive() {
 
 async function getOrCreateFolder(folderName, parentId = null) {
   try {
-    if (folderName === "ArchiveYoutubePlaylist" && archiveFolderIdCache && !parentId) {
-      console.log("Используем кэшированный ID для ArchiveYoutubePlaylist:", archiveFolderIdCache);
+    if (
+      folderName === "ArchiveYoutubePlaylist" &&
+      archiveFolderIdCache &&
+      !parentId
+    ) {
+      console.log(
+        "Используем кэшированный ID для ArchiveYoutubePlaylist:",
+        archiveFolderIdCache,
+      );
       return archiveFolderIdCache;
     }
 
     if (parentId) {
-      const existingPlaylist = playlists.find((p) => p.name === folderName && p.parentId === parentId);
+      const existingPlaylist = playlists.find(
+        (p) => p.name === folderName && p.parentId === parentId,
+      );
       if (existingPlaylist) {
-        console.log(`Используем существующий плейлист "${folderName}" с ID:`, existingPlaylist.id);
+        console.log(
+          `Используем существующий плейлист "${folderName}" с ID:`,
+          existingPlaylist.id,
+        );
         return existingPlaylist.id;
       }
     }
@@ -130,10 +163,17 @@ async function getOrCreateFolder(folderName, parentId = null) {
       fields: "id",
     });
     const folderId = folder.data.id;
-    console.log(`Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`);
+    console.log(
+      `Создана папка "${folderName}" с ID: ${folderId}${parentId ? ` (внутри ${parentId})` : ""}`,
+    );
 
     if (parentId) {
-      const newPlaylist = { id: folderId, name: folderName, parentId, songs: [] };
+      const newPlaylist = {
+        id: folderId,
+        name: folderName,
+        parentId,
+        songs: [],
+      };
       playlists.push(newPlaylist);
       await savePlaylistsToDrive();
     }
@@ -156,6 +196,11 @@ async function getFolders(parentId) {
   }
 }
 
+// Health Check эндпоинт
+app.get("/health", (req, res) => {
+  res.send("OK");
+});
+
 // Инициализация
 (async () => {
   await initializeArchiveFolder();
@@ -166,7 +211,7 @@ async function getFolders(parentId) {
 app.get("/", async (req, res) => {
   try {
     const archiveFolderId = await initializeArchiveFolder();
-    const folders = await getFolders(archiveFolderId) || [];
+    const folders = (await getFolders(archiveFolderId)) || [];
     console.log("Folders for render:", folders);
     res.render("index", { folders });
   } catch (error) {
@@ -181,7 +226,10 @@ app.post("/download", async (req, res) => {
   let folderId = req.body.folder_id;
 
   try {
-    const metadata = await youtubedl(youtubeUrl, { dumpSingleJson: true, cookies: "cookies.txt" });
+    const metadata = await youtubedl(youtubeUrl, {
+      dumpSingleJson: true,
+      cookies: "cookies.txt",
+    });
     const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
     const fileName = `${title}-${Date.now()}.mp3`;
 
@@ -203,7 +251,10 @@ app.post("/download", async (req, res) => {
     }
 
     const fileMetadata = { name: fileName, parents: [folderId] };
-    const media = { mimeType: "audio/mp3", body: fs.createReadStream(fileName) };
+    const media = {
+      mimeType: "audio/mp3",
+      body: fs.createReadStream(fileName),
+    };
     const driveResponse = await drive.files.create({
       resource: fileMetadata,
       media: media,
