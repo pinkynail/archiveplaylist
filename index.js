@@ -6,7 +6,7 @@ const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
 const Redis = require("redis");
-const RedisStore = require("connect-redis")(session); // Старая версия connect-redis
+const RedisStore = require("connect-redis")(session);
 const app = express();
 
 // Настройка Redis
@@ -15,7 +15,12 @@ const redisClient = Redis.createClient({
 });
 redisClient.on("error", (err) => console.log("Redis Client Error", err));
 (async () => {
-  await redisClient.connect();
+  try {
+    await redisClient.connect();
+    console.log("Redis connected successfully");
+  } catch (err) {
+    console.error("Failed to connect to Redis:", err);
+  }
 })();
 
 app.use(express.urlencoded({ extended: true }));
@@ -32,6 +37,7 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Google Drive setup с тайм-аутом
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const credentials = {
   web: {
@@ -49,39 +55,61 @@ const oAuth2Client = new google.auth.OAuth2(
 oAuth2Client.setCredentials({
   refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
 });
-const drive = google.drive({ version: "v3", auth: oAuth2Client });
+const drive = google.drive({
+  version: "v3",
+  auth: oAuth2Client,
+  timeout: 10000, // Тайм-аут 10 секунд
+});
 
 let archiveFolderIdCache = null;
 let playlists = [];
 let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
 
 async function initializeArchiveFolder() {
-  if (archiveFolderIdCache) return archiveFolderIdCache;
+  console.log("Starting initializeArchiveFolder...");
+  if (archiveFolderIdCache) {
+    console.log("Returning cached archiveFolderId:", archiveFolderIdCache);
+    return archiveFolderIdCache;
+  }
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   try {
+    console.log("Attempting to verify folder:", archiveFolderIdCache);
     await drive.files.get({ fileId: archiveFolderIdCache });
+    console.log("Folder verified:", archiveFolderIdCache);
   } catch (error) {
+    console.error("Error verifying folder:", error.message);
     throw new Error("Указанный ID папки недоступен");
   }
   return archiveFolderIdCache;
 }
 
 async function loadPlaylistsFromDrive() {
+  console.log("Starting loadPlaylistsFromDrive...");
   try {
-    if (!archiveFolderIdCache) await initializeArchiveFolder();
+    if (!archiveFolderIdCache) {
+      console.log("archiveFolderIdCache not set, initializing...");
+      await initializeArchiveFolder();
+    }
+    console.log("Fetching playlists.json with ID:", playlistsFileId);
     const file = await drive.files.get({
       fileId: playlistsFileId,
       alt: "media",
     });
     playlists = file.data || [];
+    console.log("Playlists loaded:", playlists);
   } catch (error) {
+    console.error("Error loading playlists:", error.message);
     playlists = [];
   }
 }
 
 async function savePlaylistsToDrive() {
+  console.log("Starting savePlaylistsToDrive...");
   try {
-    if (!archiveFolderIdCache) await initializeArchiveFolder();
+    if (!archiveFolderIdCache) {
+      console.log("archiveFolderIdCache not set, initializing...");
+      await initializeArchiveFolder();
+    }
     const fileMetadata = {
       name: "playlists.json",
       mimeType: "application/json",
@@ -92,20 +120,26 @@ async function savePlaylistsToDrive() {
       body: JSON.stringify(playlists, null, 2),
     };
     if (playlistsFileId) {
+      console.log("Updating playlists.json with ID:", playlistsFileId);
       await drive.files.update({
         fileId: playlistsFileId,
         media,
         fields: "id",
       });
+      console.log("playlists.json updated");
     } else {
+      console.log("Creating new playlists.json...");
       const newFile = await drive.files.create({
         resource: fileMetadata,
         media,
         fields: "id",
       });
       playlistsFileId = newFile.data.id;
+      console.log("playlists.json created with ID:", playlistsFileId);
     }
-  } catch (error) {}
+  } catch (error) {
+    console.error("Error saving playlists:", error.message);
+  }
 }
 
 async function getOrCreateFolder(folderName, parentId = null) {
@@ -149,9 +183,13 @@ async function getOrCreateFolder(folderName, parentId = null) {
 }
 
 async function getFolders(parentId) {
+  console.log("Starting getFolders for parentId:", parentId);
   try {
-    return playlists.filter((p) => p.parentId === parentId) || [];
+    const folders = playlists.filter((p) => p.parentId === parentId) || [];
+    console.log("Folders retrieved:", folders);
+    return folders;
   } catch (error) {
+    console.error("Error in getFolders:", error.message);
     return [];
   }
 }
@@ -175,26 +213,41 @@ async function clearAllPlaylists() {
 
 app.get("/health", (req, res) => res.send("OK"));
 
-app.get("/protect", (req, res) => res.render("protect", { error: null }));
+app.get("/protect", (req, res) => {
+  console.log("GET /protect: Rendering protect page");
+  res.render("protect", { error: null });
+});
 
 app.post("/protect", (req, res) => {
+  console.log("POST /protect: Code entered:", req.body.code);
   const enteredCode = req.body.code;
   const protectionCode = process.env.PROTECTION_CODE || "1234";
   if (enteredCode === protectionCode) {
+    console.log("Code correct, setting session.authorized to true");
     req.session.authorized = true;
+    console.log("Redirecting to /");
     res.redirect("/");
   } else {
+    console.log("Code incorrect");
     res.render("protect", { error: "Неверный код" });
   }
 });
 
 app.get("/", async (req, res) => {
-  if (!req.session.authorized) return res.redirect("/protect");
+  console.log("GET /: Checking session...");
+  if (!req.session.authorized) {
+    console.log("Not authorized, redirecting to /protect");
+    return res.redirect("/protect");
+  }
   try {
+    console.log("Calling initializeArchiveFolder...");
     const archiveFolderId = await initializeArchiveFolder();
+    console.log("Calling getFolders with archiveFolderId:", archiveFolderId);
     const folders = (await getFolders(archiveFolderId)) || [];
+    console.log("Rendering index with folders:", folders);
     res.render("index", { folders });
   } catch (error) {
+    console.error("Error in GET /:", error.message);
     res.status(500).render("error", { message: error.message });
   }
 });
