@@ -6,15 +6,15 @@ const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
 const Redis = require("redis");
-const RedisStore = require("connect-redis").default;
+const RedisStore = require("connect-redis")(session); // Исправление: передаём session
 const app = express();
 
 // Настройка Redis
 const redisClient = Redis.createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379", // Используй REDIS_URL из Render
+  url: process.env.REDIS_URL || "redis://localhost:6379",
 });
 redisClient.on("error", (err) => console.log("Redis Client Error", err));
-redisClient.connect();
+redisClient.connect().catch(console.error);
 
 app.use(express.urlencoded({ extended: true }));
 app.use(
@@ -23,7 +23,7 @@ app.use(
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production" }, // secure: true в продакшене
+    cookie: { secure: process.env.NODE_ENV === "production" },
   }),
 );
 app.set("view engine", "ejs");
@@ -154,7 +154,6 @@ async function getFolders(parentId) {
   }
 }
 
-// Добавим функцию очистки
 async function clearAllPlaylists() {
   try {
     if (!archiveFolderIdCache) await initializeArchiveFolder();
@@ -251,7 +250,6 @@ app.post("/download", async (req, res) => {
   }
 });
 
-// Новый маршрут для очистки
 app.post("/clear", async (req, res) => {
   if (!req.session.authorized) return res.redirect("/protect");
   try {
