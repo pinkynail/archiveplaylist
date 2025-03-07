@@ -13,7 +13,7 @@ const app = express();
 const redisClient = Redis.createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
-redisClient.on("error", (err) => console.log("Redis Client Error", err));
+redisClient.on("error", (err) => console.log("Redis Client Error:", err));
 (async () => {
   try {
     await redisClient.connect();
@@ -32,7 +32,7 @@ app.use(
     saveUninitialized: false,
     cookie: {
       secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60 * 1000, // 24 часа
+      maxAge: 24 * 60 * 60 * 1000,
     },
   }),
 );
@@ -61,24 +61,17 @@ oAuth2Client.setCredentials({
 const drive = google.drive({
   version: "v3",
   auth: oAuth2Client,
-  timeout: 10000, // Тайм-аут 10 секунд
+  timeout: 5000, // Уменьшен до 5 секунд
 });
 
 let archiveFolderIdCache = null;
 let playlists = [];
-let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
 
 async function initializeArchiveFolder() {
-  console.log("Starting initializeArchiveFolder...");
-  if (archiveFolderIdCache) {
-    console.log("Returning cached archiveFolderId:", archiveFolderIdCache);
-    return archiveFolderIdCache;
-  }
+  if (archiveFolderIdCache) return archiveFolderIdCache;
   archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   try {
-    console.log("Attempting to verify folder:", archiveFolderIdCache);
     await drive.files.get({ fileId: archiveFolderIdCache });
-    console.log("Folder verified:", archiveFolderIdCache);
   } catch (error) {
     console.error("Error verifying folder:", error.message);
     throw new Error("Указанный ID папки недоступен");
@@ -87,13 +80,9 @@ async function initializeArchiveFolder() {
 }
 
 async function loadPlaylistsFromDrive() {
-  console.log("Starting loadPlaylistsFromDrive...");
+  const playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
   try {
-    if (!archiveFolderIdCache) {
-      console.log("archiveFolderIdCache not set, initializing...");
-      await initializeArchiveFolder();
-    }
-    console.log("Fetching playlists.json with ID:", playlistsFileId);
+    if (!archiveFolderIdCache) await initializeArchiveFolder();
     const file = await drive.files.get({
       fileId: playlistsFileId,
       alt: "media",
@@ -107,12 +96,9 @@ async function loadPlaylistsFromDrive() {
 }
 
 async function savePlaylistsToDrive() {
-  console.log("Starting savePlaylistsToDrive...");
+  const playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
   try {
-    if (!archiveFolderIdCache) {
-      console.log("archiveFolderIdCache not set, initializing...");
-      await initializeArchiveFolder();
-    }
+    if (!archiveFolderIdCache) await initializeArchiveFolder();
     const fileMetadata = {
       name: "playlists.json",
       mimeType: "application/json",
@@ -123,22 +109,17 @@ async function savePlaylistsToDrive() {
       body: JSON.stringify(playlists, null, 2),
     };
     if (playlistsFileId) {
-      console.log("Updating playlists.json with ID:", playlistsFileId);
       await drive.files.update({
         fileId: playlistsFileId,
         media,
         fields: "id",
       });
-      console.log("playlists.json updated");
     } else {
-      console.log("Creating new playlists.json...");
       const newFile = await drive.files.create({
         resource: fileMetadata,
         media,
         fields: "id",
       });
-      playlistsFileId = newFile.data.id;
-      console.log("playlists.json created with ID:", playlistsFileId);
     }
   } catch (error) {
     console.error("Error saving playlists:", error.message);
@@ -186,11 +167,8 @@ async function getOrCreateFolder(folderName, parentId = null) {
 }
 
 async function getFolders(parentId) {
-  console.log("Starting getFolders for parentId:", parentId);
   try {
-    const folders = playlists.filter((p) => p.parentId === parentId) || [];
-    console.log("Folders retrieved:", folders);
-    return folders;
+    return playlists.filter((p) => p.parentId === parentId) || [];
   } catch (error) {
     console.error("Error in getFolders:", error.message);
     return [];
@@ -214,9 +192,22 @@ async function clearAllPlaylists() {
   }
 }
 
+// Middleware для логирования всех запросов
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url} - Started`);
+  const originalEnd = res.end;
+  res.end = function (...args) {
+    console.log(
+      `${req.method} ${req.url} - Finished with status ${res.statusCode}`,
+    );
+    originalEnd.apply(res, args);
+  };
+  next();
+});
+
 app.get("/health", (req, res) => res.send("OK"));
 
-app.get("/protect", (req, res) => {
+app.get("/protect", async (req, res) => {
   console.log("GET /protect: Rendering protect page");
   res.render("protect", { error: null });
 });
@@ -229,7 +220,7 @@ app.post("/protect", async (req, res) => {
     console.log("Code correct, setting session.authorized to true");
     req.session.authorized = true;
     try {
-      await req.session.save(); // Явно сохраняем сессию
+      await req.session.save();
       console.log("Session saved, session data:", req.session);
       console.log("Redirecting to /");
       res.redirect("/");
@@ -326,11 +317,14 @@ app.post("/clear", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 10000; // Явно указываем порт Render
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log("Server ready to accept requests");
+});
 
-(async () => {
-  await initializeArchiveFolder();
+// Ленивая загрузка плейлистов
+setTimeout(async () => {
   await loadPlaylistsFromDrive();
-  console.log("Инициализация завершена");
-})();
+  console.log("Playlists loaded lazily");
+}, 1000);
