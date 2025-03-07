@@ -7,11 +7,10 @@ const path = require("path");
 const session = require("express-session");
 const app = express();
 
-// Настройка сессий
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+    secret: process.env.SESSION_SECRET || "your-secret-key", // Используй env или замени на уникальный ключ
     resave: false,
     saveUninitialized: false,
   }),
@@ -259,8 +258,8 @@ app.post("/protect", (req, res) => {
   }
 });
 
-// Главная страница
 app.get("/", async (req, res) => {
+  // Добавляем async
   console.log(`[${new Date().toISOString()}] GET / - Checking authorization`);
   if (!req.session.authorized) {
     console.log(
