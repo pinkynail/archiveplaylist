@@ -1,6 +1,82 @@
 body {
-    background-color: #f8f9fa;
+    background-color: #1a1a1a;
+    color: #ffffff;
+    font-family: "Roboto", sans-serif;
 }
+
+.container {
+    max-width: 800px;
+}
+
 h1 {
-    color: #343a40;
+    color: #ff99cc;
+    font-weight: 700;
+}
+
+h2 {
+    color: #66ccff;
+}
+
+.form-control {
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    color: #ffffff;
+}
+
+.form-control:focus {
+    background-color: #2a2a2a;
+    border-color: #ff99cc;
+    box-shadow: 0 0 5px rgba(255, 153, 204, 0.5);
+    color: #ffffff;
+}
+
+.form-select {
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    color: #ffffff;
+}
+
+.form-select:focus {
+    border-color: #66ccff;
+    box-shadow: 0 0 5px rgba(102, 204, 255, 0.5);
+}
+
+.btn-custom {
+    background-color: #ff99cc;
+    border: none;
+    color: #1a1a1a;
+    transition: all 0.3s ease;
+}
+
+.btn-custom:hover {
+    background-color: #ff66b3;
+    transform: scale(1.05);
+}
+
+.card {
+    background-color: #252525;
+    border: none;
+    border-radius: 10px;
+}
+
+.list-group-item {
+    background-color: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    color: #ffffff;
+    transition: background-color 0.3s ease;
+}
+
+.list-group-item:hover {
+    background-color: #333333;
+}
+
+/* Анимации */
+.animate__fadeIn {
+    animation: fadeIn 1s ease-in;
+}
+
+.animate__fadeInUp {
+    animation: fadeInUp 1s ease-in;
 }
