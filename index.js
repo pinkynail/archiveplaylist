@@ -29,34 +29,85 @@ const drive = google.drive({ version: "v3", auth: oAuth2Client });
 
 let archiveFolderIdCache = null;
 let playlists = [];
-const PLAYLISTS_FILE = "playlists.json";
-let initializingPromise = null; // Для синхронизации инициализации
+let playlistsFileId = null;
+let initializingPromise = null;
 
-async function loadPlaylistsFromFile() {
+async function loadPlaylistsFromDrive() {
+  console.log("Попытка загрузить playlists.json с Google Drive...");
   try {
-    const data = await fsPromises.readFile(PLAYLISTS_FILE, "utf8");
-    playlists = JSON.parse(data);
-    console.log("Загружены плейлисты из файла:", playlists);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      console.log("Файл playlists.json не найден, начинаем с пустого списка");
-      playlists = [];
+    if (!archiveFolderIdCache) await initializeArchiveFolder();
+    const response = await drive.files.list({
+      q: `name='playlists.json' '${archiveFolderIdCache}' in parents`,
+      fields: "files(id, name)",
+      spaces: "drive",
+    });
+    const files = response.data.files;
+    if (files && files.length > 0) {
+      playlistsFileId = files[0].id;
+      const file = await drive.files.get({
+        fileId: playlistsFileId,
+        alt: "media",
+      });
+      playlists = file.data;
+      console.log("Успешно загружены плейлисты из Google Drive:", playlists);
     } else {
-      console.error("Ошибка при загрузке плейлистов:", error);
+      console.log(
+        "Файл playlists.json не найден на Google Drive, создаём новый...",
+      );
       playlists = [];
+      await savePlaylistsToDrive();
     }
+  } catch (error) {
+    console.error(
+      "Ошибка при загрузке плейлистов с Google Drive:",
+      error.message,
+    );
+    playlists = [];
+    await savePlaylistsToDrive();
   }
 }
 
-async function savePlaylistsToFile() {
+async function savePlaylistsToDrive() {
+  console.log("Сохранение playlists.json на Google Drive...");
   try {
-    await fsPromises.writeFile(
-      PLAYLISTS_FILE,
-      JSON.stringify(playlists, null, 2),
-    );
-    console.log("Плейлисты сохранены в файл:", playlists);
+    if (!archiveFolderIdCache) await initializeArchiveFolder();
+    const fileMetadata = {
+      name: "playlists.json",
+      mimeType: "application/json",
+      parents: [archiveFolderIdCache],
+    };
+    const media = {
+      mimeType: "application/json",
+      body: JSON.stringify(playlists, null, 2),
+    };
+
+    if (playlistsFileId) {
+      const updatedFile = await drive.files.update({
+        fileId: playlistsFileId,
+        media,
+        fields: "id",
+      });
+      console.log(
+        "Обновлён playlists.json на Google Drive, ID:",
+        updatedFile.data.id,
+      );
+    } else {
+      const newFile = await drive.files.create({
+        resource: fileMetadata,
+        media,
+        fields: "id",
+      });
+      playlistsFileId = newFile.data.id;
+      console.log(
+        "Создан playlists.json на Google Drive, ID:",
+        playlistsFileId,
+      );
+    }
   } catch (error) {
-    console.error("Ошибка при сохранении плейлистов:", error);
+    console.error(
+      "Ошибка при сохранении плейлистов на Google Drive:",
+      error.message,
+    );
   }
 }
 
@@ -81,9 +132,9 @@ async function initializeArchiveFolder() {
         fields: "files(id)",
         spaces: "drive",
       });
-      const folders = response.data.files;
-      if (folders && folders.length > 0) {
-        archiveFolderIdCache = folders[0].id;
+      const files = response.data.files;
+      if (files && files.length > 0) {
+        archiveFolderIdCache = files[0].id;
         console.log(
           "Найдена существующая ArchiveYoutubePlaylist с ID:",
           archiveFolderIdCache,
@@ -96,19 +147,6 @@ async function initializeArchiveFolder() {
           archiveFolderIdCache,
         );
       }
-
-      if (playlists.length > 0) {
-        const validPlaylists = playlists.filter(
-          (p) => p.parentId === archiveFolderIdCache,
-        );
-        if (validPlaylists.length !== playlists.length) {
-          playlists = validPlaylists;
-          await savePlaylistsToFile();
-          console.log(
-            "Синхронизированы плейлисты с текущим ArchiveYoutubePlaylist",
-          );
-        }
-      }
       return archiveFolderIdCache;
     } catch (error) {
       console.error(
@@ -119,7 +157,7 @@ async function initializeArchiveFolder() {
       archiveFolderIdCache = folderId;
       return archiveFolderIdCache;
     } finally {
-      initializingPromise = null; // Сбрасываем после завершения
+      initializingPromise = null;
     }
   })();
 
@@ -177,7 +215,7 @@ async function getOrCreateFolder(folderName, parentId = null) {
         songs: [],
       };
       playlists.push(newPlaylist);
-      await savePlaylistsToFile();
+      await savePlaylistsToDrive();
     }
 
     return folderId;
@@ -193,16 +231,15 @@ async function getFolders(parentId) {
   return folders;
 }
 
-// Инициализация при старте
 (async () => {
-  await loadPlaylistsFromFile();
   await initializeArchiveFolder();
+  await loadPlaylistsFromDrive();
   console.log("Инициализация завершена");
 })();
 
 app.get("/", async (req, res) => {
   try {
-    const archiveFolderId = await initializeArchiveFolder(); // Гарантируем, что ID готов
+    const archiveFolderId = await initializeArchiveFolder();
     const folders = await getFolders(archiveFolderId);
     let folderOptions = folders
       .map((f) => `<option value="${f.id}">${f.name}</option>`)
@@ -255,7 +292,7 @@ app.post("/download", async (req, res) => {
 
     await fsPromises.access(fileName);
 
-    const archiveFolderId = await initializeArchiveFolder(); // Гарантируем, что ID готов
+    const archiveFolderId = await initializeArchiveFolder();
     if (!folderId && newFolderName) {
       folderId = await getOrCreateFolder(newFolderName, archiveFolderId);
     } else if (!folderId) {
@@ -277,7 +314,7 @@ app.post("/download", async (req, res) => {
     const playlist = playlists.find((p) => p.id === folderId);
     if (playlist) {
       playlist.songs.push({ title, driveId: driveResponse.data.id });
-      await savePlaylistsToFile();
+      await savePlaylistsToDrive();
       console.log(`Добавлена песня "${title}" в плейлист "${playlist.name}"`);
     }
 
