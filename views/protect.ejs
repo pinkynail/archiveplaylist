@@ -17,7 +17,7 @@
           <%= error %>
         </div>
       <% } %>
-      <form id="protect-form" method="POST" action="/protect">
+      <form method="POST" action="/protect">
         <div class="mb-3">
           <input type="text" name="code" class="form-control" placeholder="Введите 4-значный код" maxlength="4" required>
         </div>
@@ -25,32 +25,5 @@
       </form>
     </div>
   </div>
-
-  <script>
-    document.getElementById("protect-form").addEventListener("submit", async (e) => {
-      e.preventDefault(); // Предотвращаем стандартную отправку для отладки
-      const form = e.target;
-      const formData = new FormData(form);
-      console.log("Form submitting with data:", Object.fromEntries(formData));
-
-      try {
-        const response = await fetch("/protect", {
-          method: "POST",
-          body: formData,
-        });
-        console.log("Response status:", response.status);
-        if (response.redirected) {
-          console.log("Redirecting to:", response.url);
-          window.location.href = response.url; // Следуем редиректу
-        } else {
-          const text = await response.text();
-          console.log("Response body:", text);
-          document.body.innerHTML = text; // Если не редирект, рендерим ответ
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
-      }
-    });
-  </script>
 </body>
 </html>
