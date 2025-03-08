@@ -163,7 +163,8 @@ app.post("/download", async (req, res) => {
   try {
     const metadata = await youtubedl(youtubeUrl, {
       dumpSingleJson: true,
-      cookies: "cookies.txt",
+      cookies: process.env.COOKIES_FILE || "cookies.txt",
+      ffmpegLocation: process.env.FFMPEG_PATH,
     });
     const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
     const fileName = `${title}-${Date.now()}.mp3`;
@@ -172,7 +173,8 @@ app.post("/download", async (req, res) => {
       extractAudio: true,
       audioFormat: "mp3",
       output: fileName,
-      cookies: "cookies.txt",
+      cookies: process.env.COOKIES_FILE || "cookies.txt",
+      ffmpegLocation: process.env.FFMPEG_PATH,
     });
     await fsPromises.access(fileName);
 
@@ -203,6 +205,7 @@ app.post("/download", async (req, res) => {
     const folders = await getFolders(archiveFolderId);
     res.render("success", { title, driveId: driveResponse.data.id, folders });
   } catch (error) {
+    console.error("Download error:", error.message); // Добавим логирование для отладки
     res.status(500).send("Ошибка: " + error.message);
   }
 });
@@ -211,7 +214,7 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000; // Используем порт 3000, как договорились
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   loadPlaylistsFromDrive().catch(console.error);
