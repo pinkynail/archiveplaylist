@@ -5,21 +5,12 @@ const fs = require("fs");
 const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
-const Redis = require("redis");
-const RedisStore = require("connect-redis")(session);
 const app = express();
-
-// Настройка Redis
-const redisClient = Redis.createClient({
-  url: process.env.REDIS_URL || "redis://localhost:6379",
-});
-redisClient.on("error", (err) => console.log("Redis Client Error", err));
 
 // Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    store: new RedisStore({ client: redisClient }),
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
     saveUninitialized: false,
@@ -54,13 +45,14 @@ oAuth2Client.setCredentials({
 const drive = google.drive({
   version: "v3",
   auth: oAuth2Client,
-  timeout: 10000, // Тайм-аут 10 секунд
+  timeout: 10000,
 });
 
 let archiveFolderIdCache = null;
 let playlists = [];
 let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
 
+// Функции Google Drive (без изменений)
 async function initializeArchiveFolder() {
   console.log("Starting initializeArchiveFolder...");
   if (archiveFolderIdCache) {
@@ -228,7 +220,7 @@ app.post("/protect", async (req, res) => {
     console.log("Code correct, setting session.authorized to true");
     req.session.authorized = true;
     try {
-      await req.session.save(); // Явно сохраняем сессию
+      await req.session.save();
       console.log("Session saved, session data:", req.session);
       console.log("Redirecting to /");
       res.redirect("/");
@@ -325,17 +317,15 @@ app.post("/clear", async (req, res) => {
   }
 });
 
-// Запуск сервера с оптимизацией холодного старта
+// Запуск сервера
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, "0.0.0.0", async () => {
   try {
-    await redisClient.connect();
-    console.log("Redis connected successfully");
     await initializeArchiveFolder();
     await loadPlaylistsFromDrive();
     console.log(`Server running on port ${PORT} and fully initialized`);
   } catch (err) {
     console.error("Initialization failed:", err);
-    process.exit(1); // Завершаем процесс, если инициализация провалилась
+    process.exit(1);
   }
 });
