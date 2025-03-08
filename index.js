@@ -24,7 +24,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production", // true на Render
+      secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 часа
     },
@@ -216,10 +216,16 @@ app.get("/ready", (req, res) => {
 
 app.get("/health", (req, res) => res.send("OK"));
 
-app.get("/protect", (req, res) => {
+app.get("/protect", async (req, res) => {
   console.log("GET /protect: Rendering protect page");
   console.log("Current session:", req.session);
-  res.render("protect", { error: null });
+  try {
+    res.render("protect", { error: null });
+    console.log("GET /protect: Rendered successfully");
+  } catch (error) {
+    console.error("Error rendering /protect:", error);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 app.post("/protect", async (req, res) => {
@@ -240,7 +246,12 @@ app.post("/protect", async (req, res) => {
     }
   } else {
     console.log("Code incorrect");
-    res.render("protect", { error: "Неверный код" });
+    try {
+      res.render("protect", { error: "Неверный код" });
+    } catch (error) {
+      console.error("Error rendering /protect with error:", error);
+      res.status(500).send("Internal Server Error");
+    }
   }
 });
 
