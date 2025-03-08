@@ -170,7 +170,6 @@ app.post("/download", async (req, res) => {
       dumpSingleJson: true,
       cookies: process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
       ffmpegLocation: process.env.FFMPEG_PATH,
-      noCookiesSave: true, // Отключаем автоматическое сохранение cookies
     });
     const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
     const fileName = `${title}-${Date.now()}.mp3`;
@@ -181,7 +180,6 @@ app.post("/download", async (req, res) => {
       output: fileName,
       cookies: process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
       ffmpegLocation: process.env.FFMPEG_PATH,
-      noCookiesSave: true, // Отключаем автоматическое сохранение cookies
     });
     await fsPromises.access(fileName);
 
