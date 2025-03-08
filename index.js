@@ -15,9 +15,11 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.NODE_ENV === "production", // true на Render, false локально
+      httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 часа
     },
+    store: new session.MemoryStore(), // Явно указываем MemoryStore
   }),
 );
 app.set("view engine", "ejs");
@@ -52,7 +54,6 @@ let archiveFolderIdCache = null;
 let playlists = [];
 let playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
 
-// Функции Google Drive (без изменений)
 async function initializeArchiveFolder() {
   console.log("Starting initializeArchiveFolder...");
   if (archiveFolderIdCache) {
@@ -209,6 +210,7 @@ app.get("/health", (req, res) => res.send("OK"));
 
 app.get("/protect", (req, res) => {
   console.log("GET /protect: Rendering protect page");
+  console.log("Current session:", req.session);
   res.render("protect", { error: null });
 });
 
