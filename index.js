@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const youtubedl = require("youtube-dl-exec");
 const fsPromises = require("fs").promises;
