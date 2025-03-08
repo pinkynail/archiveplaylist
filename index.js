@@ -5,21 +5,29 @@ const fs = require("fs");
 const { google } = require("googleapis");
 const path = require("path");
 const session = require("express-session");
+const Redis = require("redis");
+const RedisStore = require("connect-redis")(session);
 const app = express();
+
+// Настройка Redis
+const redisClient = Redis.createClient({
+  url: process.env.REDIS_URL || "redis://localhost:6379",
+});
+redisClient.on("error", (err) => console.log("Redis Client Error", err));
 
 // Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
+    store: new RedisStore({ client: redisClient }),
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === "production", // true на Render, false локально
+      secure: process.env.NODE_ENV === "production", // true на Render
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 часа
     },
-    store: new session.MemoryStore(), // Явно указываем MemoryStore
   }),
 );
 app.set("view engine", "ejs");
@@ -323,6 +331,8 @@ app.post("/clear", async (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, "0.0.0.0", async () => {
   try {
+    await redisClient.connect();
+    console.log("Redis connected successfully");
     await initializeArchiveFolder();
     await loadPlaylistsFromDrive();
     console.log(`Server running on port ${PORT} and fully initialized`);
