@@ -36,7 +36,7 @@ let playlists = [];
 
 async function initializeArchiveFolder() {
   if (archiveFolderIdCache) return archiveFolderIdCache;
-  archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB"; // Замени на свой ID папки
+  archiveFolderIdCache = "1opfVlshZHmomjtmdoFnffH7N-sTBAbEB";
   try {
     await drive.files.get({ fileId: archiveFolderIdCache });
     console.log("Folder verified");
@@ -48,7 +48,7 @@ async function initializeArchiveFolder() {
 }
 
 async function loadPlaylistsFromDrive() {
-  const playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs"; // Замени на свой ID файла
+  const playlistsFileId = "1mEd7LeS8aloGZTeBD01lbLVnhp4adIGs";
   try {
     if (!archiveFolderIdCache) await initializeArchiveFolder();
     const file = await drive.files.get({
@@ -232,8 +232,13 @@ app.post("/clear", async (req, res) => {
   }
 });
 
+// Добавляем маршрут health-check
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  loadPlaylistsFromDrive().catch(console.error); // Ленивая загрузка плейлистов
+  loadPlaylistsFromDrive().catch(console.error);
 });
