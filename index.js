@@ -14,15 +14,8 @@ const redisClient = Redis.createClient({
   url: process.env.REDIS_URL || "redis://localhost:6379",
 });
 redisClient.on("error", (err) => console.log("Redis Client Error", err));
-(async () => {
-  try {
-    await redisClient.connect();
-    console.log("Redis connected successfully");
-  } catch (err) {
-    console.error("Failed to connect to Redis:", err);
-  }
-})();
 
+// Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
@@ -40,7 +33,7 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Google Drive setup с тайм-аутом
+// Google Drive setup
 const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 const credentials = {
   web: {
@@ -214,6 +207,12 @@ async function clearAllPlaylists() {
   }
 }
 
+// Routes
+app.get("/ready", (req, res) => {
+  console.log("Ready check requested");
+  res.status(200).send("OK");
+});
+
 app.get("/health", (req, res) => res.send("OK"));
 
 app.get("/protect", (req, res) => {
@@ -326,11 +325,17 @@ app.post("/clear", async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-(async () => {
-  await initializeArchiveFolder();
-  await loadPlaylistsFromDrive();
-  console.log("Инициализация завершена");
-})();
+// Запуск сервера с оптимизацией холодного старта
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, "0.0.0.0", async () => {
+  try {
+    await redisClient.connect();
+    console.log("Redis connected successfully");
+    await initializeArchiveFolder();
+    await loadPlaylistsFromDrive();
+    console.log(`Server running on port ${PORT} and fully initialized`);
+  } catch (err) {
+    console.error("Initialization failed:", err);
+    process.exit(1); // Завершаем процесс, если инициализация провалилась
+  }
+});
