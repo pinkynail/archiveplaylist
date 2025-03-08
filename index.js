@@ -161,9 +161,14 @@ app.post("/download", async (req, res) => {
   let folderId = req.body.folder_id;
 
   try {
+    console.log("Attempting to download from URL:", youtubeUrl);
+    console.log(
+      "Using cookies file:",
+      process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
+    );
     const metadata = await youtubedl(youtubeUrl, {
       dumpSingleJson: true,
-      cookies: process.env.COOKIES_FILE || "cookies.txt",
+      cookies: process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
       ffmpegLocation: process.env.FFMPEG_PATH,
     });
     const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
@@ -173,7 +178,7 @@ app.post("/download", async (req, res) => {
       extractAudio: true,
       audioFormat: "mp3",
       output: fileName,
-      cookies: process.env.COOKIES_FILE || "cookies.txt",
+      cookies: process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
       ffmpegLocation: process.env.FFMPEG_PATH,
     });
     await fsPromises.access(fileName);
@@ -205,7 +210,7 @@ app.post("/download", async (req, res) => {
     const folders = await getFolders(archiveFolderId);
     res.render("success", { title, driveId: driveResponse.data.id, folders });
   } catch (error) {
-    console.error("Download error:", error.message); // Добавим логирование для отладки
+    console.error("Download error:", error.message);
     res.status(500).send("Ошибка: " + error.message);
   }
 });
