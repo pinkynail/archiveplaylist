@@ -143,23 +143,6 @@ async function getFolders(parentId) {
   }
 }
 
-async function clearAllPlaylists() {
-  try {
-    if (!archiveFolderIdCache) await initializeArchiveFolder();
-    playlists = [];
-    await savePlaylistsToDrive();
-    const files = await drive.files.list({
-      q: `'${archiveFolderIdCache}' in parents and mimeType='application/vnd.google-apps.folder'`,
-      fields: "files(id)",
-    });
-    for (const file of files.data.files) {
-      await drive.files.delete({ fileId: file.id });
-    }
-  } catch (error) {
-    throw error;
-  }
-}
-
 app.get("/", async (req, res) => {
   try {
     if (playlists.length === 0) await loadPlaylistsFromDrive();
@@ -223,16 +206,6 @@ app.post("/download", async (req, res) => {
   }
 });
 
-app.post("/clear", async (req, res) => {
-  try {
-    await clearAllPlaylists();
-    res.redirect("/");
-  } catch (error) {
-    res.status(500).send("Ошибка: " + error.message);
-  }
-});
-
-// Добавляем маршрут health-check
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
