@@ -40,6 +40,7 @@ async function loadCookiesFromDrive() {
 
     // Ищем папку ArchivePlaylist
     const parentId = await initializeArchiveFolder();
+    console.log("ID папки ArchivePlaylist:", parentId);
 
     // Выводим все файлы в папке для отладки
     const listResponse = await driveClient.files.list({
@@ -58,7 +59,38 @@ async function loadCookiesFromDrive() {
     );
     if (!cookieFile) {
       console.warn("Файл cookies.txt не найден в папке ArchivePlaylist.");
-      return null; // Возвращаем null, если файл отсутствует
+      // Попытка загрузки по известному ID (как fallback)
+      const knownCookieId = "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o"; // Твой ID файла
+      try {
+        const fileResponse = await driveClient.files.get(
+          { fileId: knownCookieId, alt: "media" },
+          { responseType: "stream" },
+        );
+        const dest = "/tmp/cookies.txt";
+        await new Promise((resolve, reject) => {
+          const fileStream = fs.createWriteStream(dest);
+          fileResponse.data
+            .on("end", () => {
+              console.log(
+                "Cookies загружены по известному ID в /tmp/cookies.txt",
+              );
+              fs.chmodSync(dest, 0o444);
+              resolve();
+            })
+            .on("error", reject)
+            .pipe(fileStream);
+        });
+        return dest;
+      } catch (idError) {
+        console.error("Ошибка загрузки по известному ID:", idError.message);
+        if (idError.response) {
+          console.error(
+            "Детали ошибки:",
+            JSON.stringify(idError.response.data, null, 2),
+          );
+        }
+        return null;
+      }
     }
     console.log("Найден файл cookies.txt с ID:", cookieFile.id);
 
@@ -118,6 +150,7 @@ async function initializeArchiveFolder() {
         fields: "id",
       });
       folderId = folder.data.id;
+      console.log("Создана новая папка ArchivePlaylist с ID:", folderId);
     }
     return folderId;
   } catch (error) {
@@ -305,7 +338,7 @@ app.post("/download", async (req, res) => {
     else if (!folderId)
       folderId = await getOrCreateFolder("playlist", archiveFolderId);
 
-    const fileMetadata = { name: fileName, parents: [parentId] };
+    const fileMetadata = { name: fileName, parents: [folderId] };
     const media = {
       mimeType: "audio/mp3",
       body: fs.createReadStream(fileName),
