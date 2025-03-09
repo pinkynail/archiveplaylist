@@ -11,7 +11,7 @@ app.set("view engine", "ejs");
 app.use(express.static("public"));
 app.use(express.urlencoded({ extended: true }));
 
-// Инициализация Google Drive API
+// Инициализация Google Drive API с OAuth2
 let auth;
 const drive = google.drive({ version: "v3" });
 let playlists = [];
@@ -20,18 +20,16 @@ const ARCHIVE_FOLDER_NAME = "ArchivePlaylist";
 // Функция для загрузки cookies.txt из Google Drive
 async function loadCookiesFromDrive() {
   try {
-    // Инициализация auth, если не определён
+    // Инициализация auth с OAuth2Client
     if (!auth) {
-      const { GoogleAuth } = require("google-auth-library");
-      const keys = {
+      const { OAuth2Client } = require("google-auth-library");
+      const credentials = {
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
         refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
       };
-      auth = new GoogleAuth({
-        credentials: keys,
-        scopes: ["https://www.googleapis.com/auth/drive"],
-      });
+      auth = new OAuth2Client(credentials.client_id, credentials.client_secret);
+      await auth.setCredentials({ refresh_token: credentials.refresh_token });
     }
     const driveClient = google.drive({ version: "v3", auth });
     const fileId = "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o"; // ID файла cookies.txt
