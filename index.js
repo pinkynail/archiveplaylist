@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 let auth;
 const drive = google.drive({ version: "v3" });
 let playlists = [];
-const ARCHIVE_FOLDER_NAME = "ArchiveYoutubePlaylist"; // Обновлено на правильное имя
+const ARCHIVE_FOLDER_NAME = "ArchiveYoutubePlaylist";
 
 // Функция для загрузки cookies.txt из Google Drive
 async function loadCookiesFromDrive() {
@@ -53,6 +53,29 @@ async function loadCookiesFromDrive() {
       listResponse.data.files,
     );
 
+    // Проверяем конкретный файл по ID
+    const knownCookieId = "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o";
+    try {
+      const fileCheck = await driveClient.files.get({
+        fileId: knownCookieId,
+        fields: "id, name, parents",
+      });
+      console.log("Проверка файла с ID", knownCookieId, ":", fileCheck.data);
+    } catch (idError) {
+      console.error(
+        "Файл с ID",
+        knownCookieId,
+        "не найден или недоступен:",
+        idError.message,
+      );
+      if (idError.response) {
+        console.error(
+          "Детали ошибки:",
+          JSON.stringify(idError.response.data, null, 2),
+        );
+      }
+    }
+
     // Ищем файл cookies.txt (с учетом регистра и вариантов)
     const cookieFile = listResponse.data.files.find((file) =>
       file.name.toLowerCase().includes("cookies.txt"),
@@ -61,7 +84,7 @@ async function loadCookiesFromDrive() {
       console.warn(
         "Файл cookies.txt не найден в папке ArchiveYoutubePlaylist.",
       );
-      return null; // Возвращаем null, если файл отсутствует
+      return null; // Возвращаем null, чтобы приложение продолжало работу
     }
     console.log("Найден файл cookies.txt с ID:", cookieFile.id);
 
@@ -91,9 +114,7 @@ async function loadCookiesFromDrive() {
         JSON.stringify(error.response.data, null, 2),
       );
     }
-    throw new Error(
-      "Не удалось загрузить cookies. Проверь наличие cookies.txt в папке ArchiveYoutubePlaylist.",
-    );
+    return null; // Избегаем краха приложения
   }
 }
 
@@ -287,9 +308,13 @@ app.post("/download", async (req, res) => {
 
     // Проверка, что cookies загружены
     if (!global.cookiesPath) {
-      throw new Error(
-        "Cookies не загружены. Убедись, что cookies.txt находится в папке ArchiveYoutubePlaylist.",
-      );
+      console.warn("Cookies не загружены. Загрузка может быть невозможна.");
+      res
+        .status(400)
+        .send(
+          "Ошибка: Cookies не загружены. Проверь файл cookies.txt в папке ArchiveYoutubePlaylist.",
+        );
+      return;
     }
 
     const metadata = await youtubedl(youtubeUrl, {
