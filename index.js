@@ -28,19 +28,22 @@ async function loadCookiesFromDrive() {
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
         refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
       };
+      console.log("Инициализация OAuth2Client с:", credentials);
       auth = new OAuth2Client(credentials.client_id, credentials.client_secret);
       await auth.setCredentials({ refresh_token: credentials.refresh_token });
+      console.log("Аутентификация успешна, токен установлен.");
     }
     const driveClient = google.drive({ version: "v3", auth });
     const fileId =
       process.env.COOKIES_FILE_ID || "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o"; // ID файла cookies.txt
-    const dest = "/tmp/cookies.txt";
+    console.log("Попытка загрузки файла с ID:", fileId);
 
     // Скачиваем файл
     const response = await driveClient.files.get(
       { fileId, alt: "media" },
       { responseType: "stream" },
     );
+    const dest = "/tmp/cookies.txt";
     await new Promise((resolve, reject) => {
       const fileStream = fs.createWriteStream(dest);
       response.data
@@ -56,6 +59,12 @@ async function loadCookiesFromDrive() {
     return dest;
   } catch (error) {
     console.error("Ошибка загрузки cookies из Google Drive:", error.message);
+    if (error.response) {
+      console.error(
+        "Детали ошибки:",
+        JSON.stringify(error.response.data, null, 2),
+      );
+    }
     throw new Error(
       "Не удалось загрузить cookies. Проверь подключение к Google Drive, ID файла или переменные окружения.",
     );
