@@ -35,23 +35,32 @@ async function loadCookiesFromDrive() {
     const driveClient = google.drive({
       version: "v3",
       auth,
-      params: { key: process.env.GOOGLE_API_KEY }, // Добавляем API Key
+      params: { key: process.env.GOOGLE_API_KEY },
     });
 
-    // Ищем файл cookies.txt в папке ArchivePlaylist
+    // Ищем папку ArchivePlaylist
     const parentId = await initializeArchiveFolder();
-    const response = await driveClient.files.list({
-      q: `'${parentId}' in parents and name='cookies.txt' and trashed=false`,
+
+    // Выводим все файлы в папке для отладки
+    const listResponse = await driveClient.files.list({
+      q: `'${parentId}' in parents and trashed=false`,
       fields: "files(id, name)",
       supportsAllDrives: true,
     });
-    const cookieFile = response.data.files.find(
-      (file) => file.name === "cookies.txt",
+    console.log(
+      "Список файлов в папке ArchivePlaylist:",
+      listResponse.data.files,
+    );
+
+    // Ищем файл cookies.txt (с учетом регистра и вариантов)
+    const cookieFile = listResponse.data.files.find((file) =>
+      file.name.toLowerCase().includes("cookies.txt"),
     );
     if (!cookieFile) {
       console.warn("Файл cookies.txt не найден в папке ArchivePlaylist.");
       return null; // Возвращаем null, если файл отсутствует
     }
+    console.log("Найден файл cookies.txt с ID:", cookieFile.id);
 
     // Загружаем содержимое cookies.txt
     const fileResponse = await driveClient.files.get(
@@ -91,7 +100,7 @@ async function initializeArchiveFolder() {
     const driveClient = google.drive({
       version: "v3",
       auth,
-      params: { key: process.env.GOOGLE_API_KEY }, // Добавляем API Key
+      params: { key: process.env.GOOGLE_API_KEY },
     });
     const response = await driveClient.files.list({
       q: `name='${ARCHIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
@@ -296,7 +305,7 @@ app.post("/download", async (req, res) => {
     else if (!folderId)
       folderId = await getOrCreateFolder("playlist", archiveFolderId);
 
-    const fileMetadata = { name: fileName, parents: [folderId] };
+    const fileMetadata = { name: fileName, parents: [parentId] };
     const media = {
       mimeType: "audio/mp3",
       body: fs.createReadStream(fileName),
