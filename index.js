@@ -20,7 +20,6 @@ const ARCHIVE_FOLDER_NAME = "ArchivePlaylist";
 // Функция для загрузки cookies.txt из Google Drive
 async function loadCookiesFromDrive() {
   try {
-    // Инициализация auth с OAuth2Client
     if (!auth) {
       const { OAuth2Client } = require("google-auth-library");
       const credentials = {
@@ -34,23 +33,34 @@ async function loadCookiesFromDrive() {
       console.log("Аутентификация успешна, токен установлен.");
     }
     const driveClient = google.drive({ version: "v3", auth });
-    const fileId =
-      process.env.COOKIES_FILE_ID || "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o"; // ID файла cookies.txt
-    console.log("Попытка загрузки файла с ID:", fileId);
 
-    // Скачиваем файл
-    const response = await driveClient.files.get(
-      { fileId, alt: "media" },
+    // Ищем файл cookies.txt в папке ArchivePlaylist
+    const parentId = await initializeArchiveFolder();
+    const response = await driveClient.files.list({
+      q: `'${parentId}' in parents and name='cookies.txt' and trashed=false`,
+      fields: "files(id, name)",
+      supportsAllDrives: true,
+    });
+    const cookieFile = response.data.files.find(
+      (file) => file.name === "cookies.txt",
+    );
+    if (!cookieFile) {
+      console.warn("Файл cookies.txt не найден в папке ArchivePlaylist.");
+      return null; // Возвращаем null, если файл отсутствует
+    }
+
+    // Загружаем содержимое cookies.txt
+    const fileResponse = await driveClient.files.get(
+      { fileId: cookieFile.id, alt: "media" },
       { responseType: "stream" },
     );
     const dest = "/tmp/cookies.txt";
     await new Promise((resolve, reject) => {
       const fileStream = fs.createWriteStream(dest);
-      response.data
+      fileResponse.data
         .on("end", () => {
           console.log("Cookies загружены в /tmp/cookies.txt");
-          // Устанавливаем атрибут "только для чтения"
-          fs.chmodSync(dest, 0o444); // Чтение только
+          fs.chmodSync(dest, 0o444); // Устанавливаем атрибут "только для чтения"
           resolve();
         })
         .on("error", reject)
@@ -66,7 +76,7 @@ async function loadCookiesFromDrive() {
       );
     }
     throw new Error(
-      "Не удалось загрузить cookies. Проверь подключение к Google Drive, ID файла или переменные окружения.",
+      "Не удалось загрузить cookies. Проверь наличие cookies.txt в папке ArchivePlaylist.",
     );
   }
 }
@@ -77,6 +87,7 @@ async function initializeArchiveFolder() {
     const response = await drive.files.list({
       q: `name='${ARCHIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
+      supportsAllDrives: true,
     });
     let folderId = response.data.files[0]?.id;
     if (!folderId) {
@@ -103,6 +114,7 @@ async function getOrCreateFolder(folderName, parentId) {
     const response = await drive.files.list({
       q: `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
+      supportsAllDrives: true,
     });
     let folderId = response.data.files[0]?.id;
     if (!folderId) {
@@ -130,6 +142,7 @@ async function getFolders(parentId) {
     const response = await drive.files.list({
       q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
+      supportsAllDrives: true,
     });
     return response.data.files;
   } catch (error) {
@@ -145,6 +158,7 @@ async function savePlaylistsToDrive() {
     const response = await drive.files.list({
       q: `name='playlists.json' and '${parentId}' in parents and trashed=false`,
       fields: "files(id)",
+      supportsAllDrives: true,
     });
     const fileId = response.data.files[0]?.id;
     const fileMetadata = { name: "playlists.json", parents: [parentId] };
@@ -177,11 +191,12 @@ async function loadPlaylistsFromDrive() {
     const response = await drive.files.list({
       q: `name='playlists.json' and '${parentId}' in parents and trashed=false`,
       fields: "files(id)",
+      supportsAllDrives: true,
     });
     const fileId = response.data.files[0]?.id;
     if (fileId) {
       const file = await drive.files.get(
-        { fileId, alt: "media" },
+        { fileId, alt: "media", supportsAllDrives: true },
         { responseType: "stream" },
       );
       const chunks = [];
@@ -218,7 +233,9 @@ app.post("/download", async (req, res) => {
 
     // Проверка, что cookies загружены
     if (!global.cookiesPath) {
-      throw new Error("Cookies не загружены. Перезапустите приложение.");
+      throw new Error(
+        "Cookies не загружены. Убедись, что cookies.txt находится в папке ArchivePlaylist.",
+      );
     }
 
     const metadata = await youtubedl(youtubeUrl, {
@@ -275,7 +292,7 @@ app.post("/download", async (req, res) => {
   try {
     // Загружаем cookies перед запуском сервера
     const cookiesPath = await loadCookiesFromDrive();
-    global.cookiesPath = cookiesPath; // Делаем путь доступным глобально
+    global.cookiesPath = cookiesPath || null; // Устанавливаем null, если файл не найден
 
     // Загружаем плейлисты
     await loadPlaylistsFromDrive();
