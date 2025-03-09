@@ -162,13 +162,15 @@ app.post("/download", async (req, res) => {
 
   try {
     console.log("Attempting to download from URL:", youtubeUrl);
-    console.log(
-      "Using cookies file:",
-      process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
-    );
+
+    // Проверка, что cookies загружены
+    if (!global.cookiesPath) {
+      throw new Error("Cookies не загружены. Перезапустите приложение.");
+    }
+
     const metadata = await youtubedl(youtubeUrl, {
       dumpSingleJson: true,
-      cookies: process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
+      cookies: global.cookiesPath,
       ffmpegLocation: process.env.FFMPEG_PATH,
     });
     const title = metadata.title.replace(/[/\\?%*:|"<>]/g, "");
@@ -178,7 +180,7 @@ app.post("/download", async (req, res) => {
       extractAudio: true,
       audioFormat: "mp3",
       output: fileName,
-      cookies: process.env.COOKIES_FILE || "/etc/secrets/cookies.txt",
+      cookies: global.cookiesPath,
       ffmpegLocation: process.env.FFMPEG_PATH,
     });
     await fsPromises.access(fileName);
@@ -218,6 +220,57 @@ app.post("/download", async (req, res) => {
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
+
+// Функция для загрузки cookies.txt из Google Drive
+async function loadCookiesFromDrive() {
+  try {
+    const drive = google.drive({ version: "v3", auth });
+    const fileId = "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o"; // ID файла из Google Drive
+    const dest = "/tmp/cookies.txt";
+
+    // Скачиваем файл
+    const response = await drive.files.get(
+      { fileId, alt: "media" },
+      { responseType: "stream" },
+    );
+    await new Promise((resolve, reject) => {
+      const fileStream = fs.createWriteStream(dest);
+      response.data
+        .on("end", () => {
+          console.log("Cookies загружены в /tmp/cookies.txt");
+          // Устанавливаем атрибут "только для чтения"
+          fs.chmodSync(dest, 0o444); // Чтение только
+          resolve();
+        })
+        .on("error", reject)
+        .pipe(fileStream);
+    });
+    return dest;
+  } catch (error) {
+    console.error("Ошибка загрузки cookies из Google Drive:", error.message);
+    throw new Error(
+      "Не удалось загрузить cookies. Проверь подключение к Google Drive.",
+    );
+  }
+}
+
+// Инициализация при старте приложения
+(async () => {
+  try {
+    // Загружаем cookies перед запуском сервера
+    const cookiesPath = await loadCookiesFromDrive();
+    global.cookiesPath = cookiesPath; // Делаем путь доступным глобально
+
+    // Запуск сервера
+    const port = process.env.PORT || 3000;
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+  } catch (error) {
+    console.error("Ошибка при запуске:", error.message);
+    process.exit(1);
+  }
+})();
 
 const PORT = process.env.PORT || 3000; // Используем порт 3000, как договорились
 app.listen(PORT, () => {
