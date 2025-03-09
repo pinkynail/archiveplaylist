@@ -17,6 +17,9 @@ const drive = google.drive({ version: "v3" });
 let playlists = [];
 const ARCHIVE_FOLDER_NAME = "ArchiveYoutubePlaylist";
 
+// Задержка для синхронизации Google Drive
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Функция для загрузки cookies.txt из Google Drive
 async function loadCookiesFromDrive() {
   try {
@@ -42,43 +45,24 @@ async function loadCookiesFromDrive() {
     const parentId = await initializeArchiveFolder();
     console.log("ID папки ArchiveYoutubePlaylist:", parentId);
 
+    // Даём Google Drive время на синхронизацию
+    console.log("Ожидание синхронизации Google Drive (5 секунд)...");
+    await delay(5000);
+
     // Выводим все файлы в папке для отладки
     const listResponse = await driveClient.files.list({
       q: `'${parentId}' in parents and trashed=false`,
-      fields: "files(id, name)",
+      fields: "files(id, name, mimeType, permissions)",
       supportsAllDrives: true,
     });
     console.log(
       "Список файлов в папке ArchiveYoutubePlaylist:",
-      listResponse.data.files,
+      JSON.stringify(listResponse.data.files, null, 2),
     );
 
-    // Проверяем конкретный файл по ID
-    const knownCookieId = "1HTewN8jUeX7BQeKlWbxkQ1kefwHvVI7o";
-    try {
-      const fileCheck = await driveClient.files.get({
-        fileId: knownCookieId,
-        fields: "id, name, parents",
-      });
-      console.log("Проверка файла с ID", knownCookieId, ":", fileCheck.data);
-    } catch (idError) {
-      console.error(
-        "Файл с ID",
-        knownCookieId,
-        "не найден или недоступен:",
-        idError.message,
-      );
-      if (idError.response) {
-        console.error(
-          "Детали ошибки:",
-          JSON.stringify(idError.response.data, null, 2),
-        );
-      }
-    }
-
     // Ищем файл cookies.txt (с учетом регистра и вариантов)
-    const cookieFile = listResponse.data.files.find((file) =>
-      file.name.toLowerCase().includes("cookies.txt"),
+    const cookieFile = listResponse.data.files.find(
+      (file) => file.name.toLowerCase() === "cookies.txt",
     );
     if (!cookieFile) {
       console.warn(
@@ -87,6 +71,9 @@ async function loadCookiesFromDrive() {
       return null; // Возвращаем null, чтобы приложение продолжало работу
     }
     console.log("Найден файл cookies.txt с ID:", cookieFile.id);
+
+    // Проверяем права доступа
+    console.log("Права доступа для cookies.txt:", cookieFile.permissions);
 
     // Загружаем содержимое cookies.txt
     const fileResponse = await driveClient.files.get(
