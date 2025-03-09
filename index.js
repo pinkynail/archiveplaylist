@@ -20,7 +20,7 @@ const ARCHIVE_FOLDER_NAME = "ArchiveYoutubePlaylist";
 // Задержка для синхронизации Google Drive
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Функция для загрузки cookies.txt из Google Drive
+// Функция для загрузки cookies из Google Drive
 async function loadCookiesFromDrive() {
   try {
     if (!auth) {
@@ -46,8 +46,8 @@ async function loadCookiesFromDrive() {
     console.log("ID папки ArchiveYoutubePlaylist:", parentId);
 
     // Даём Google Drive время на синхронизацию
-    console.log("Ожидание синхронизации Google Drive (5 секунд)...");
-    await delay(5000);
+    console.log("Ожидание синхронизации Google Drive (10 секунд)...");
+    await delay(10000);
 
     // Выводим все файлы в папке для отладки
     const listResponse = await driveClient.files.list({
@@ -60,24 +60,65 @@ async function loadCookiesFromDrive() {
       JSON.stringify(listResponse.data.files, null, 2),
     );
 
-    // Ищем файл cookies.txt (с учетом регистра и вариантов)
-    const cookieFile = listResponse.data.files.find(
-      (file) => file.name.toLowerCase() === "cookies.txt",
+    // Ищем файл cookies.txt или cookies.json
+    const cookieFile = listResponse.data.files.find((file) =>
+      ["cookies.txt", "cookies.json"].includes(file.name.toLowerCase()),
     );
-    if (!cookieFile) {
+    let cookieFileId = cookieFile ? cookieFile.id : null;
+
+    if (!cookieFileId) {
       console.warn(
-        "Файл cookies.txt не найден в папке ArchiveYoutubePlaylist.",
+        "Файл cookies.txt или cookies.json не найден в папке ArchiveYoutubePlaylist.",
       );
-      return null; // Возвращаем null, чтобы приложение продолжало работу
+      // Пробуем загрузить по известному ID из переменной COOKIES_FILE_ID
+      const knownCookieId = process.env.COOKIES_FILE_ID;
+      if (knownCookieId) {
+        console.log("Попытка загрузки файла по ID:", knownCookieId);
+        try {
+          const fileCheck = await driveClient.files.get({
+            fileId: knownCookieId,
+            fields: "id, name, mimeType, permissions",
+          });
+          console.log(
+            "Проверка файла с ID",
+            knownCookieId,
+            ":",
+            fileCheck.data,
+          );
+          cookieFileId = knownCookieId;
+        } catch (idError) {
+          console.error(
+            "Файл с ID",
+            knownCookieId,
+            "не найден или недоступен:",
+            idError.message,
+          );
+          if (idError.response) {
+            console.error(
+              "Детали ошибки:",
+              JSON.stringify(idError.response.data, null, 2),
+            );
+          }
+          return null; // Возвращаем null, если файл не найден
+        }
+      } else {
+        console.warn("Переменная COOKIES_FILE_ID не задана.");
+        return null;
+      }
     }
-    console.log("Найден файл cookies.txt с ID:", cookieFile.id);
+    console.log("Найден файл с ID:", cookieFileId);
 
     // Проверяем права доступа
-    console.log("Права доступа для cookies.txt:", cookieFile.permissions);
+    if (cookieFile) {
+      console.log(
+        "Права доступа для найденного файла:",
+        cookieFile.permissions,
+      );
+    }
 
-    // Загружаем содержимое cookies.txt
+    // Загружаем содержимое файла
     const fileResponse = await driveClient.files.get(
-      { fileId: cookieFile.id, alt: "media" },
+      { fileId: cookieFileId, alt: "media" },
       { responseType: "stream" },
     );
     const dest = "/tmp/cookies.txt";
@@ -299,7 +340,7 @@ app.post("/download", async (req, res) => {
       res
         .status(400)
         .send(
-          "Ошибка: Cookies не загружены. Проверь файл cookies.txt в папке ArchiveYoutubePlaylist.",
+          "Ошибка: Cookies не загружены. Проверь файл cookies.json в папке ArchiveYoutubePlaylist.",
         );
       return;
     }
