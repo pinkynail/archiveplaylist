@@ -32,7 +32,11 @@ async function loadCookiesFromDrive() {
       await auth.setCredentials({ refresh_token: credentials.refresh_token });
       console.log("Аутентификация успешна, токен установлен.");
     }
-    const driveClient = google.drive({ version: "v3", auth });
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY }, // Добавляем API Key
+    });
 
     // Ищем файл cookies.txt в папке ArchivePlaylist
     const parentId = await initializeArchiveFolder();
@@ -84,7 +88,12 @@ async function loadCookiesFromDrive() {
 // Инициализация корневой папки ArchivePlaylist
 async function initializeArchiveFolder() {
   try {
-    const response = await drive.files.list({
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY }, // Добавляем API Key
+    });
+    const response = await driveClient.files.list({
       q: `name='${ARCHIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
       supportsAllDrives: true,
@@ -95,7 +104,7 @@ async function initializeArchiveFolder() {
         name: ARCHIVE_FOLDER_NAME,
         mimeType: "application/vnd.google-apps.folder",
       };
-      const folder = await drive.files.create({
+      const folder = await driveClient.files.create({
         resource: fileMetadata,
         fields: "id",
       });
@@ -104,6 +113,12 @@ async function initializeArchiveFolder() {
     return folderId;
   } catch (error) {
     console.error("Ошибка инициализации ArchivePlaylist:", error.message);
+    if (error.response) {
+      console.error(
+        "Детали ошибки:",
+        JSON.stringify(error.response.data, null, 2),
+      );
+    }
     throw error;
   }
 }
@@ -111,7 +126,12 @@ async function initializeArchiveFolder() {
 // Получение или создание папки плейлиста
 async function getOrCreateFolder(folderName, parentId) {
   try {
-    const response = await drive.files.list({
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY },
+    });
+    const response = await driveClient.files.list({
       q: `name='${folderName}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
       supportsAllDrives: true,
@@ -123,7 +143,7 @@ async function getOrCreateFolder(folderName, parentId) {
         mimeType: "application/vnd.google-apps.folder",
         parents: [parentId],
       };
-      const folder = await drive.files.create({
+      const folder = await driveClient.files.create({
         resource: fileMetadata,
         fields: "id",
       });
@@ -139,7 +159,12 @@ async function getOrCreateFolder(folderName, parentId) {
 // Получение списка папок
 async function getFolders(parentId) {
   try {
-    const response = await drive.files.list({
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY },
+    });
+    const response = await driveClient.files.list({
       q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
       supportsAllDrives: true,
@@ -154,8 +179,13 @@ async function getFolders(parentId) {
 // Сохранение плейлистов в Google Drive
 async function savePlaylistsToDrive() {
   try {
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY },
+    });
     const parentId = await initializeArchiveFolder();
-    const response = await drive.files.list({
+    const response = await driveClient.files.list({
       q: `name='playlists.json' and '${parentId}' in parents and trashed=false`,
       fields: "files(id)",
       supportsAllDrives: true,
@@ -167,13 +197,13 @@ async function savePlaylistsToDrive() {
       body: JSON.stringify(playlists, null, 2),
     };
     if (fileId) {
-      await drive.files.update({
+      await driveClient.files.update({
         fileId,
         resource: fileMetadata,
         media,
       });
     } else {
-      await drive.files.create({
+      await driveClient.files.create({
         resource: fileMetadata,
         media,
       });
@@ -187,15 +217,20 @@ async function savePlaylistsToDrive() {
 // Загрузка плейлистов из Google Drive
 async function loadPlaylistsFromDrive() {
   try {
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY },
+    });
     const parentId = await initializeArchiveFolder();
-    const response = await drive.files.list({
+    const response = await driveClient.files.list({
       q: `name='playlists.json' and '${parentId}' in parents and trashed=false`,
       fields: "files(id)",
       supportsAllDrives: true,
     });
     const fileId = response.data.files[0]?.id;
     if (fileId) {
-      const file = await drive.files.get(
+      const file = await driveClient.files.get(
         { fileId, alt: "media", supportsAllDrives: true },
         { responseType: "stream" },
       );
@@ -266,7 +301,12 @@ app.post("/download", async (req, res) => {
       mimeType: "audio/mp3",
       body: fs.createReadStream(fileName),
     };
-    const driveResponse = await drive.files.create({
+    const driveClient = google.drive({
+      version: "v3",
+      auth,
+      params: { key: process.env.GOOGLE_API_KEY },
+    });
+    const driveResponse = await driveClient.files.create({
       resource: fileMetadata,
       media,
       fields: "id",
